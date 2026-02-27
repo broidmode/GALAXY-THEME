@@ -1,5 +1,6 @@
--- ScreenSelectMusic overlay — Custom 3-column grid song browser
--- No MusicWheel. Pure Lua with SONGMAN/GAMESTATE APIs.
+-- ScreenGalaxyMusic overlay — Custom 3-column grid song browser
+-- Infinite-scroll illusion: cursor stays near screen center,
+-- the list wraps circularly above and below.
 --
 -- Data model: flat mixed-type array.
 --   string  = group header
@@ -13,26 +14,43 @@ local CARD_H       = 190
 local COL_GAP      = 12
 local ROW_GAP      = 12
 local HEADER_H     = 44
-local POOL_CARDS   = 24    -- max visible song cards
-local POOL_HEADERS = 6     -- max visible group headers
+local POOL_CARDS   = 30    -- enough to fill screen + margin
+local POOL_HEADERS = 8
 
 local GRID_X       = SCREEN_CENTER_X
-local GRID_TOP     = 120
+local CENTER_Y     = SCREEN_CENTER_Y  -- cursor item is pinned here
 
 local totalColW    = CARD_W + COL_GAP
 local totalRowH    = CARD_H + ROW_GAP
+
+-- How far above/below center we render (pixels)
+local RENDER_MARGIN = SCREEN_HEIGHT / 2 + CARD_H + 60
 
 -- ===== STATE =====
 local FlatList     = {}
 local Cursor       = 1
 local OpenGroup    = ""
-local ScrollOffset = 0
 local Accepted     = false
 
--- Actor pool references (filled in OnCommand)
 local CardPool     = {}
 local HeaderPool   = {}
-local RootActor    = nil
+
+-- ===== HELPERS =====
+
+-- Wrap an index into [1, #FlatList]
+local function Wrap(idx)
+	local n = #FlatList
+	if n == 0 then return 1 end
+	return ((idx - 1) % n) + 1
+end
+
+local function IsGroup(idx)
+	return type(FlatList[idx]) == "string"
+end
+
+local function IsSong(idx)
+	return type(FlatList[idx]) == "table"
+end
 
 -- ===== DATA LAYER =====
 
@@ -59,115 +77,163 @@ local function BuildFlatList()
 	return list
 end
 
-local function IsGroup(idx)
-	return type(FlatList[idx]) == "string"
+-- ===== LAYOUT ENGINE =====
+-- Walk forward and backward from cursor, wrapping around the list.
+-- Cursor item is at y=0 (mapped to CENTER_Y on screen).
+-- Returns array of { flatIdx, y, type, col } entries.
+
+local function GetSongColLocal(idx)
+	-- Count backwards to nearest group header to get ordinal
+	local count = 0
+	local i = idx
+	while i >= 1 and IsSong(i) do
+		count = count + 1
+		i = i - 1
+	end
+	return ((count - 1) % COLS) + 1
 end
 
-local function IsSong(idx)
-	return type(FlatList[idx]) == "table"
+-- Center-to-center distance between two vertically adjacent items.
+-- Since actors are center-aligned, we need half-heights of both items plus the gap.
+local function CenterAdvance(typeA, typeB)
+	local hA = (typeA == "group") and HEADER_H or CARD_H
+	local hB = (typeB == "group") and HEADER_H or CARD_H
+	return hA / 2 + ROW_GAP + hB / 2
 end
 
--- ===== LAYOUT =====
--- Returns layoutInfo[i] = { y, type, col } for every item.
--- y is in grid-local coordinates (before scrolling).
-local function ComputeLayout()
-	local layout = {}
+local function ComputeVisibleItems()
+	local n = #FlatList
+	if n == 0 then return {} end
+
+	local result = {}
+
+	-- === Find the start of cursor's row ===
+	-- Walk backwards from cursor to find the first item in this row
+	-- (either col==1 or a group header or beginning)
+	local rowStart = Cursor
+	while true do
+		local prevWi = Wrap(rowStart - 1)
+		if not IsSong(prevWi) then break end
+		if GetSongColLocal(prevWi) >= GetSongColLocal(Wrap(rowStart)) then break end
+		if rowStart - 1 == Cursor - n then break end
+		rowStart = rowStart - 1
+	end
+
+	-- === Walk FORWARD from row start ===
 	local y = 0
-	local songCount = 0
-
-	for i = 1, #FlatList do
-		if IsGroup(i) then
-			if songCount > 0 then
-				y = y + totalRowH
-				songCount = 0
-			end
-			layout[i] = { y = y, type = "group", col = 0 }
-			y = y + HEADER_H + ROW_GAP
+	local visited = 0
+	local idx = rowStart
+	while y < RENDER_MARGIN and visited < n do
+		local wi = Wrap(idx)
+		if IsGroup(wi) then
+			result[#result+1] = { flatIdx = wi, y = y, type = "group", col = 0 }
+			local nextType = IsSong(Wrap(idx + 1)) and "song" or "group"
+			y = y + CenterAdvance("group", nextType)
 		else
-			songCount = songCount + 1
-			local col = ((songCount - 1) % COLS) + 1
-			layout[i] = { y = y, type = "song", col = col }
-			if col == COLS then
-				y = y + totalRowH
-				songCount = 0
+			local col = GetSongColLocal(wi)
+			result[#result+1] = { flatIdx = wi, y = y, type = "song", col = col }
+			local nextWi = Wrap(idx + 1)
+			if col == COLS or not IsSong(nextWi) then
+				local nextType = IsSong(nextWi) and "song" or "group"
+				y = y + CenterAdvance("song", nextType)
 			end
 		end
+		visited = visited + 1
+		idx = idx + 1
 	end
-	return layout
-end
 
--- ===== SCROLL =====
-local function UpdateScroll(layout)
-	if not layout[Cursor] then return end
-	local curY = layout[Cursor].y
-	local viewH = 5 * totalRowH
-	local target = curY - viewH / 2 + totalRowH / 2
-	ScrollOffset = math.max(0, target)
+	-- === Walk BACKWARD from row start ===
+	-- Track what type of item sits just below our walk position
+	-- so we can compute correct center-to-center distances.
+	local lastBelowType = IsGroup(Wrap(rowStart)) and "group" or "song"
+	y = 0
+	visited = 0
+	idx = rowStart - 1
+	local pendingRow = {}
+
+	local function FlushPending()
+		if #pendingRow == 0 then return end
+		y = y - CenterAdvance("song", lastBelowType)
+		for _, p in ipairs(pendingRow) do
+			result[#result+1] = { flatIdx = p.fi, y = y, type = "song", col = p.col }
+		end
+		pendingRow = {}
+		lastBelowType = "song"
+	end
+
+	while (-y) < RENDER_MARGIN and visited < n do
+		local wi = Wrap(idx)
+		if IsGroup(wi) then
+			FlushPending()
+			y = y - CenterAdvance("group", lastBelowType)
+			result[#result+1] = { flatIdx = wi, y = y, type = "group", col = 0 }
+			lastBelowType = "group"
+		else
+			local col = GetSongColLocal(wi)
+			pendingRow[#pendingRow+1] = { fi = wi, col = col }
+			if col == 1 then
+				FlushPending()
+			end
+		end
+		visited = visited + 1
+		idx = idx - 1
+	end
+	FlushPending()
+
+	return result
 end
 
 -- ===== RENDER =====
 local function Refresh()
-	local layout = ComputeLayout()
-	UpdateScroll(layout)
+	if #FlatList == 0 then return end
+
+	local items = ComputeVisibleItems()
 
 	-- Hide everything
-	for i = 1, POOL_CARDS do
-		CardPool[i]:visible(false)
-	end
-	for i = 1, POOL_HEADERS do
-		HeaderPool[i]:visible(false)
-	end
+	for i = 1, POOL_CARDS do CardPool[i]:visible(false) end
+	for i = 1, POOL_HEADERS do HeaderPool[i]:visible(false) end
 
-	local ci = 1  -- card pool index
-	local hi = 1  -- header pool index
+	local ci = 1
+	local hi = 1
 
-	for i = 1, #FlatList do
-		local info = layout[i]
-		if not info then break end
-		local screenY = GRID_TOP + info.y - ScrollOffset
+	for _, item in ipairs(items) do
+		local screenY = CENTER_Y + item.y
 
-		-- Cull items outside viewport
-		if screenY > -(CARD_H + 50) and screenY < SCREEN_HEIGHT + CARD_H then
-			if info.type == "group" and hi <= POOL_HEADERS then
-				local a = HeaderPool[hi]
-				a:visible(true)
-				a:xy(GRID_X, screenY)
-				a:playcommand("SetHeader", {
-					Text = FlatList[i],
-					HasFocus = (i == Cursor),
-					IsOpen = (FlatList[i] == OpenGroup),
-				})
-				hi = hi + 1
-			elseif info.type == "song" and ci <= POOL_CARDS then
-				local a = CardPool[ci]
-				a:visible(true)
-				local xOff = (info.col - 2) * totalColW
-				a:xy(GRID_X + xOff, screenY)
-				local entry = FlatList[i]
-				a:playcommand("SetCard", {
-					Song = entry[1],
-					Steps = entry[2],
-					HasFocus = (i == Cursor),
-				})
-				ci = ci + 1
-			end
+		if item.type == "group" and hi <= POOL_HEADERS then
+			local a = HeaderPool[hi]
+			a:visible(true)
+			a:xy(GRID_X, screenY)
+			a:playcommand("SetHeader", {
+				Text = FlatList[item.flatIdx],
+				HasFocus = (item.flatIdx == Cursor),
+				IsOpen = (FlatList[item.flatIdx] == OpenGroup),
+			})
+			hi = hi + 1
+		elseif item.type == "song" and ci <= POOL_CARDS then
+			local a = CardPool[ci]
+			a:visible(true)
+			local xOff = (item.col - 2) * totalColW
+			a:xy(GRID_X + xOff, screenY)
+			local entry = FlatList[item.flatIdx]
+			a:playcommand("SetCard", {
+				Song = entry[1],
+				Steps = entry[2],
+				HasFocus = (item.flatIdx == Cursor),
+			})
+			ci = ci + 1
 		end
 	end
 end
 
 -- ===== NAVIGATION =====
 local function MoveCursor(delta)
-	if Accepted then return end
-	local newPos = Cursor + delta
-	newPos = math.max(1, math.min(#FlatList, newPos))
-	if newPos ~= Cursor then
-		Cursor = newPos
-		if IsSong(Cursor) then
-			GAMESTATE:SetCurrentSong(FlatList[Cursor][1])
-		end
-		SOUND:PlayOnce(THEME:GetPathS("","_switch down"))
-		Refresh()
+	if Accepted or #FlatList == 0 then return end
+	Cursor = Wrap(Cursor + delta)
+	if IsSong(Cursor) then
+		GAMESTATE:SetCurrentSong(FlatList[Cursor][1])
 	end
+	SOUND:PlayOnce(THEME:GetPathS("","_switch down"))
+	Refresh()
 end
 
 local function ToggleGroup()
@@ -179,14 +245,12 @@ local function ToggleGroup()
 		OpenGroup = grp
 	end
 	FlatList = BuildFlatList()
-	-- Find the header again
 	for i = 1, #FlatList do
 		if IsGroup(i) and FlatList[i] == grp then
 			Cursor = i
 			break
 		end
 	end
-	-- If opened, move cursor to first song
 	if OpenGroup == grp then
 		if Cursor < #FlatList and IsSong(Cursor + 1) then
 			Cursor = Cursor + 1
@@ -198,17 +262,34 @@ end
 
 local function ConfirmSong()
 	if Accepted or not IsSong(Cursor) then return end
-
 	local entry = FlatList[Cursor]
 	GAMESTATE:SetCurrentSong(entry[1])
 	GAMESTATE:SetCurrentPlayMode("PlayMode_Regular")
 	for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
 		GAMESTATE:SetCurrentSteps(pn, entry[2])
 	end
-
 	Accepted = true
 	SOUND:PlayOnce(THEME:GetPathS("Common","Start"))
 	SCREENMAN:GetTopScreen():StartTransitioningScreen("SM_GoToNextScreen")
+end
+
+-- Row navigation helpers for songs
+local function FindGroupStart(idx)
+	local i = idx
+	while i > 1 and IsSong(Wrap(i - 1)) do
+		i = i - 1
+	end
+	return i
+end
+
+local function FindGroupEnd(idx)
+	local i = idx
+	local n = #FlatList
+	while IsSong(Wrap(i + 1)) do
+		i = i + 1
+		if i - idx > n then break end  -- safety
+	end
+	return i
 end
 
 local function InputHandler(event)
@@ -227,22 +308,14 @@ local function InputHandler(event)
 		return true
 	elseif btn == "MenuDown" then
 		if IsSong(Cursor) then
-			-- Try to jump one row down (3 items)
 			local target = Cursor + COLS
-			if target <= #FlatList and IsSong(target) then
+			-- Check if target is still a song in the same group
+			local groupEnd = FindGroupEnd(Cursor)
+			if target <= groupEnd and IsSong(target) then
 				MoveCursor(COLS)
 			else
-				-- Move to last song in this group
-				local last = Cursor
-				while last < #FlatList and IsSong(last + 1) do
-					last = last + 1
-				end
-				if last > Cursor then
-					MoveCursor(last - Cursor)
-				else
-					-- Move to next group header
-					MoveCursor(1)
-				end
+				-- Jump to next group header (wrapping)
+				MoveCursor(groupEnd - Cursor + 1)
 			end
 		else
 			MoveCursor(1)
@@ -250,22 +323,13 @@ local function InputHandler(event)
 		return true
 	elseif btn == "MenuUp" then
 		if IsSong(Cursor) then
-			-- Find start of songs in this group
-			local groupStart = Cursor
-			while groupStart > 1 and IsSong(groupStart - 1) do
-				groupStart = groupStart - 1
-			end
+			local groupStart = FindGroupStart(Cursor)
 			local target = Cursor - COLS
 			if target >= groupStart then
 				MoveCursor(-COLS)
 			else
-				-- Move to first song in group
-				if Cursor > groupStart then
-					MoveCursor(-(Cursor - groupStart))
-				else
-					-- On first row already, go to group header
-					MoveCursor(-1)
-				end
+				-- Go to group header
+				MoveCursor(groupStart - Cursor - 1)
 			end
 		else
 			MoveCursor(-1)
@@ -336,9 +400,7 @@ local function MakeSongCard(name)
 		},
 		Def.Sprite{
 			Name = "Jacket",
-			InitCommand = function(self)
-				self:y(-18)
-			end,
+			InitCommand = function(self) self:y(-18) end,
 		},
 		LoadFont("Common Normal") .. {
 			Name = "Title",
@@ -396,7 +458,6 @@ end
 local t = Def.ActorFrame{
 	Name = "GridBrowser",
 	OnCommand = function(self)
-		-- Collect pool references by name
 		for i = 1, POOL_CARDS do
 			CardPool[i] = self:GetChild("Card"..i)
 		end
@@ -404,7 +465,6 @@ local t = Def.ActorFrame{
 			HeaderPool[i] = self:GetChild("Header"..i)
 		end
 
-		-- Initialize
 		FlatList = BuildFlatList()
 		Cursor = 1
 		OpenGroup = ""
