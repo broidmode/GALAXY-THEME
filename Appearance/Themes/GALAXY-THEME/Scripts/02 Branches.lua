@@ -8,7 +8,7 @@ function SelectMusicOrCourse()
 	elseif GAMESTATE:IsCourseMode() then
 		return "ScreenSelectCourse"
 	else
-		return "ScreenSelectMusic"
+		return "ScreenGalaxyMusic"
 	end
 end
 
