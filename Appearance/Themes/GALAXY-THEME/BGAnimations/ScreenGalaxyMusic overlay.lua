@@ -14,8 +14,8 @@ local CARD_H       = 190
 local COL_GAP      = 12
 local ROW_GAP      = 12
 local HEADER_H     = 44
-local POOL_CARDS   = 30    -- enough to fill screen + margin
-local POOL_HEADERS = 8
+local POOL_CARDS   = 42    -- enough to fill screen + animation margin
+local POOL_HEADERS = 12
 
 local GRID_X       = SCREEN_CENTER_X
 local CENTER_Y     = SCREEN_CENTER_Y  -- cursor item is pinned here
@@ -34,6 +34,15 @@ local Accepted     = false
 
 local CardPool     = {}
 local HeaderPool   = {}
+local GridFrame    = nil   -- reference to GridBrowser ActorFrame
+
+-- ===== ANIMATION STATE =====
+local VisualOffset = 0     -- current pixel offset (ActorFrame y-shift)
+local AnimActive   = false
+local AnimTime     = 0     -- seconds into current animation
+local ANIM_DUR     = 0.15  -- animation duration in seconds
+-- Cubic coefficients: f(s) = As³ + Bs² + Cs + D, s ∈ [0,1]
+local AnimA, AnimB, AnimC, AnimD = 0, 0, 0, 0
 
 -- ===== HELPERS =====
 
@@ -101,29 +110,64 @@ local function CenterAdvance(typeA, typeB)
 	return hA / 2 + ROW_GAP + hB / 2
 end
 
-local function ComputeVisibleItems()
+-- ===== SCROLL ANIMATION =====
+-- Cubic Hermite: f(s) from startOffset to 0, f'(1)=0.
+-- If starting mid-scroll, initial derivative carries over for continuity.
+-- f(s) = As³ + Bs² + Cs + D,  s ∈ [0, 1]
+
+local function EvalCubic(s)
+	return AnimA*s*s*s + AnimB*s*s + AnimC*s + AnimD
+end
+
+local function GetCurrentAnimVelNorm()
+	if not AnimActive then return 0 end
+	local s = math.min(AnimTime / ANIM_DUR, 1)
+	return 3*AnimA*s*s + 2*AnimB*s + AnimC
+end
+
+local function StartScrollAnim(startOffset, velNorm)
+	local P = startOffset
+	local V = velNorm
+	AnimA = V + 2*P
+	AnimB = -2*V - 3*P
+	AnimC = V
+	AnimD = P
+	AnimTime = 0
+	AnimActive = true
+	VisualOffset = P
+end
+
+local function ResetAnim()
+	VisualOffset = 0
+	AnimActive = false
+	if GridFrame then GridFrame:y(0) end
+end
+
+local function ComputeVisibleItems(renderMargin)
+	renderMargin = renderMargin or RENDER_MARGIN
 	local n = #FlatList
 	if n == 0 then return {} end
 
 	local result = {}
 
 	-- === Find the start of cursor's row ===
-	-- Walk backwards from cursor to find the first item in this row
-	-- (either col==1 or a group header or beginning)
+	-- Groups always start their own row; only songs need row-start search.
 	local rowStart = Cursor
-	while true do
-		local prevWi = Wrap(rowStart - 1)
-		if not IsSong(prevWi) then break end
-		if GetSongColLocal(prevWi) >= GetSongColLocal(Wrap(rowStart)) then break end
-		if rowStart - 1 == Cursor - n then break end
-		rowStart = rowStart - 1
+	if IsSong(Cursor) then
+		while true do
+			local prevWi = Wrap(rowStart - 1)
+			if not IsSong(prevWi) then break end
+			if GetSongColLocal(prevWi) >= GetSongColLocal(Wrap(rowStart)) then break end
+			if rowStart - 1 == Cursor - n then break end
+			rowStart = rowStart - 1
+		end
 	end
 
 	-- === Walk FORWARD from row start ===
 	local y = 0
 	local visited = 0
 	local idx = rowStart
-	while y < RENDER_MARGIN and visited < n do
+	while y < renderMargin and visited < n do
 		local wi = Wrap(idx)
 		if IsGroup(wi) then
 			result[#result+1] = { flatIdx = wi, y = y, type = "group", col = 0 }
@@ -161,7 +205,7 @@ local function ComputeVisibleItems()
 		lastBelowType = "song"
 	end
 
-	while (-y) < RENDER_MARGIN and visited < n do
+	while (-y) < renderMargin and visited < n do
 		local wi = Wrap(idx)
 		if IsGroup(wi) then
 			FlushPending()
@@ -184,10 +228,10 @@ local function ComputeVisibleItems()
 end
 
 -- ===== RENDER =====
-local function Refresh()
+local function Refresh(preItems)
 	if #FlatList == 0 then return end
 
-	local items = ComputeVisibleItems()
+	local items = preItems or ComputeVisibleItems(RENDER_MARGIN + math.abs(VisualOffset))
 
 	-- Hide everything
 	for i = 1, POOL_CARDS do CardPool[i]:visible(false) end
@@ -228,12 +272,42 @@ end
 -- ===== NAVIGATION =====
 local function MoveCursor(delta)
 	if Accepted or #FlatList == 0 then return end
+	local oldCursor = Cursor
 	Cursor = Wrap(Cursor + delta)
 	if IsSong(Cursor) then
 		GAMESTATE:SetCurrentSong(FlatList[Cursor][1])
 	end
 	SOUND:PlayOnce(THEME:GetPathS("","_switch down"))
-	Refresh()
+
+	-- Compute layout with extended margin for animation headroom
+	local extMargin = RENDER_MARGIN + math.abs(VisualOffset) + 400
+	local items = ComputeVisibleItems(extMargin)
+
+	-- Find where old cursor sits in the new layout.
+	-- With wrapping, oldCursor may appear multiple times;
+	-- pick the occurrence closest to center (smallest |y|).
+	local oldY = nil
+	for _, item in ipairs(items) do
+		if item.flatIdx == oldCursor then
+			if oldY == nil or math.abs(item.y) < math.abs(oldY) then
+				oldY = item.y
+			end
+		end
+	end
+
+	-- Carry over velocity if already mid-scroll
+	local curVelNorm = GetCurrentAnimVelNorm()
+	local newOffset = oldY and (VisualOffset - oldY) or 0
+
+	if math.abs(newOffset) > 0.5 then
+		StartScrollAnim(newOffset, curVelNorm)
+	else
+		VisualOffset = 0
+		AnimActive = false
+	end
+
+	Refresh(items)
+	if GridFrame then GridFrame:y(VisualOffset) end
 end
 
 local function ToggleGroup()
@@ -251,12 +325,7 @@ local function ToggleGroup()
 			break
 		end
 	end
-	if OpenGroup == grp then
-		if Cursor < #FlatList and IsSong(Cursor + 1) then
-			Cursor = Cursor + 1
-			GAMESTATE:SetCurrentSong(FlatList[Cursor][1])
-		end
-	end
+	ResetAnim()
 	Refresh()
 end
 
@@ -353,6 +422,7 @@ local function InputHandler(event)
 					break
 				end
 			end
+			ResetAnim()
 			Refresh()
 		else
 			SCREENMAN:GetTopScreen():StartTransitioningScreen("SM_GoToPrevScreen")
@@ -458,6 +528,7 @@ end
 local t = Def.ActorFrame{
 	Name = "GridBrowser",
 	OnCommand = function(self)
+		GridFrame = self
 		for i = 1, POOL_CARDS do
 			CardPool[i] = self:GetChild("Card"..i)
 		end
@@ -469,8 +540,24 @@ local t = Def.ActorFrame{
 		Cursor = 1
 		OpenGroup = ""
 		Accepted = false
+		ResetAnim()
 		SCREENMAN:GetTopScreen():AddInputCallback(InputHandler)
 		Refresh()
+
+		-- Per-frame animation: shift ActorFrame y along cubic curve
+		self:SetUpdateFunction(function(af, dt)
+			if not AnimActive then return end
+			AnimTime = AnimTime + dt
+			if AnimTime >= ANIM_DUR then
+				VisualOffset = 0
+				AnimActive = false
+				af:y(0)
+				return
+			end
+			local s = AnimTime / ANIM_DUR
+			VisualOffset = EvalCubic(s)
+			af:y(VisualOffset)
+		end)
 	end,
 	OffCommand = function(self)
 		SCREENMAN:GetTopScreen():RemoveInputCallback(InputHandler)
