@@ -20,6 +20,17 @@ rawset(Branch, "AfterTitleMenu", function()
 	return "ScreenSelectProfile"
 end)
 
+-- Override: after profile select, route based on player count
+-- Two players → auto-set Versus style, skip style select
+-- One player  → show style select (Single / Double)
+rawset(Branch, "AfterSelectProfile", function()
+	if GAMESTATE:GetNumPlayersEnabled() >= 2 then
+		GAMESTATE:SetCurrentStyle("versus")
+		return SelectMusicOrCourse()
+	end
+	return "ScreenSelectStyle"
+end)
+
 -- Override: skip ProfileLoad and PlayMode screens
 rawset(Branch, "AfterSelectStyle", function()
 	return SelectMusicOrCourse()
