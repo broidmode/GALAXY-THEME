@@ -52,15 +52,17 @@ local MENU_ROW_H   = 50
 local MENU_PAD     = 16
 
 -- ===== SIDE MENU STATE =====
-local MenuOpen     = false
-local MenuRow      = 1
-local MenuFrame    = nil
+-- Per-player: each player has their own menu, option rows, and cursor
+local MenuOpen     = {}    -- MenuOpen[pn] = true/false
+local MenuRow      = {}    -- MenuRow[pn] = current row index
+local MenuFrame    = {}    -- MenuFrame[pn] = ActorFrame reference
+local PlayerOptionRows = {} -- PlayerOptionRows[pn] = { {name,choices,selected}, ... }
 
 -- ===== DIFFICULTY PICKER STATE =====
 local DiffPickOpen = false
-local DiffPickIdx  = 1       -- selected index in DiffSteps[]
+local DiffPickIdx  = {}      -- DiffPickIdx[pn] = selected index in DiffSteps[]
 local DiffSteps    = {}      -- array of Steps objects for chosen song
-local DiffFrame    = nil     -- reference to DiffPicker ActorFrame
+local DiffFrame    = {}      -- DiffFrame[pn] = ActorFrame reference (per-player boxes)
 local DiffSong     = nil     -- the Song being difficulty-picked
 
 -- DDR-A3 difficulty colors
@@ -74,24 +76,9 @@ local DiffColors = {
 }
 
 -- Global options table — read by 04 GaugeState.lua and gameplay decorations
--- Load saved prefs from ThemePrefs (persisted to Save/ThemePrefs.ini)
-local savedMode  = GetGalaxyPref("SpeedMode")  or "Real"
-local savedValue = GetGalaxyPref("SpeedValue") or 500
-local savedTurn  = GetGalaxyPref("Turn")       or 1
-local savedScroll= GetGalaxyPref("Scroll")     or 1
-local savedGauge = GetGalaxyPref("Gauge")      or "Normal"
-
-GalaxyOptions = GalaxyOptions or {}
-for _, pn in ipairs({PLAYER_1, PLAYER_2}) do
-	GalaxyOptions[pn] = GalaxyOptions[pn] or {
-		Gauge = savedGauge,
-		SpeedMode = savedMode,
-		SpeedValue = savedValue,
-	}
-	-- Ensure speed fields exist for tables created before this version
-	if not GalaxyOptions[pn].SpeedMode then GalaxyOptions[pn].SpeedMode = savedMode end
-	if not GalaxyOptions[pn].SpeedValue then GalaxyOptions[pn].SpeedValue = savedValue end
-end
+-- Per-player settings are loaded from profile by 03 ProfilePrefs.lua.
+-- GalaxyOptions[pn] = { SpeedMode, SpeedValue, Turn, Scroll, Gauge }
+-- 03 ProfilePrefs.lua guarantees defaults exist via EnsurePlayerOptions.
 
 -- ===== SONG INFO PANEL STATE =====
 local InfoFrame = nil   -- reference set in InitCommand
@@ -103,7 +90,6 @@ local PreviewActor = nil
 GalaxyCursorState = GalaxyCursorState or {}
 
 -- ===== SIDE MENU OPTION DEFINITIONS =====
-local OptionRows    -- forward-declare so SyncSpeedValueChoices can close over it
 
 local SpeedModes = {
 	{ label = "XMod",  value = "XMod" },
@@ -123,31 +109,6 @@ local BPMValues = {}  -- shared for CMod, MMod, Real Speed
 do
 	for v = 50, 1200, 25 do
 		BPMValues[#BPMValues+1] = { label = tostring(v), value = v }
-	end
-end
-
--- Swap Speed Value row choices based on current Speed Mode
-local function SyncSpeedValueChoices()
-	local modeRow = OptionRows and OptionRows[1]
-	local valRow  = OptionRows and OptionRows[2]
-	if not modeRow or not valRow then return end
-	local mode = SpeedModes[modeRow.selected].value
-	local oldVal = valRow.choices[valRow.selected] and valRow.choices[valRow.selected].value
-	if mode == "XMod" then
-		valRow.choices = XModValues
-	else
-		valRow.choices = BPMValues
-	end
-	-- Find closest value in new choices
-	if oldVal then
-		local bestIdx, bestDist = 1, 999999
-		for i, c in ipairs(valRow.choices) do
-			local d = math.abs(c.value - oldVal)
-			if d < bestDist then bestIdx, bestDist = i, d end
-		end
-		valRow.selected = bestIdx
-	else
-		valRow.selected = 1
 	end
 end
 
@@ -181,73 +142,67 @@ local GaugeChoices = {
 	{ label = "Risky",      value = "Risky" },
 }
 
--- Resolve saved default indices
-local function FindChoiceIdx(choices, field, savedVal, fallback)
+local NUM_OPTION_ROWS = 5
+
+-- Helper: find index in a choices array where c[field] == val
+local function FindChoiceIdx(choices, field, val, fallback)
 	for i, c in ipairs(choices) do
-		if c[field] == savedVal then return i end
+		if c[field] == val then return i end
 	end
 	return fallback
 end
 
-local defaultModeIdx  = FindChoiceIdx(SpeedModes, "value", savedMode, 4)
-local defaultGaugeIdx = FindChoiceIdx(GaugeChoices, "value", savedGauge, 1)
-local defaultSpeedChoices = (savedMode == "XMod") and XModValues or BPMValues
-local defaultSpeedIdx = 1
-do
-	local bestDist = 999999
-	for i, c in ipairs(defaultSpeedChoices) do
-		local d = math.abs(c.value - savedValue)
-		if d < bestDist then defaultSpeedIdx, bestDist = i, d end
-	end
-end
-
-OptionRows = {
-	{ name = "Mode",   choices = SpeedModes,         selected = defaultModeIdx },
-	{ name = "Speed",  choices = defaultSpeedChoices, selected = defaultSpeedIdx },
-	{ name = "Turn",   choices = TurnChoices,         selected = math.max(1, math.min(savedTurn, #TurnChoices)) },
-	{ name = "Scroll", choices = ScrollChoices,        selected = math.max(1, math.min(savedScroll, #ScrollChoices)) },
-	{ name = "Gauge",  choices = GaugeChoices,        selected = defaultGaugeIdx },
-}
-
--- ===== SIDE MENU FUNCTIONS =====
-local function ReadCurrentSpeed()
-	local pn = GAMESTATE:GetMasterPlayerNumber()
-	local opts = GalaxyOptions[pn]
-	local mode = opts and opts.SpeedMode or "XMod"
-	local val  = opts and opts.SpeedValue or 2.0
-
-	-- Set Speed Mode row
-	for i, c in ipairs(SpeedModes) do
-		if c.value == mode then
-			OptionRows[1].selected = i
-			break
-		end
-	end
-
-	-- Set Speed Value row choices and find closest value
-	if mode == "XMod" then
-		OptionRows[2].choices = XModValues
-	else
-		OptionRows[2].choices = BPMValues
-	end
+-- Helper: find closest numeric value in a choices array
+local function FindClosestIdx(choices, val)
 	local bestIdx, bestDist = 1, 999999
-	for i, c in ipairs(OptionRows[2].choices) do
+	for i, c in ipairs(choices) do
 		local d = math.abs(c.value - val)
 		if d < bestDist then bestIdx, bestDist = i, d end
 	end
-	OptionRows[2].selected = bestIdx
+	return bestIdx
 end
 
-local function ReadCurrentGauge()
-	local pn = GAMESTATE:GetMasterPlayerNumber()
-	local current = GalaxyOptions[pn] and GalaxyOptions[pn].Gauge or "Normal"
-	for i, c in ipairs(GaugeChoices) do
-		if c.value == current then
-			OptionRows[5].selected = i
-			return
-		end
+-- Build an OptionRows table for a specific player from GalaxyOptions[pn]
+local function BuildOptionRowsForPlayer(pn)
+	local opts = GalaxyOptions[pn] or {}
+	local mode  = opts.SpeedMode  or "Real"
+	local speed = opts.SpeedValue or 500
+	local turn  = opts.Turn       or 1
+	local scroll= opts.Scroll     or 1
+	local gauge = opts.Gauge      or "Normal"
+
+	local modeIdx  = FindChoiceIdx(SpeedModes, "value", mode, 4)
+	local speedChoices = (mode == "XMod") and XModValues or BPMValues
+	local speedIdx = FindClosestIdx(speedChoices, speed)
+	local gaugeIdx = FindChoiceIdx(GaugeChoices, "value", gauge, 1)
+
+	return {
+		{ name = "Mode",   choices = SpeedModes,    selected = modeIdx },
+		{ name = "Speed",  choices = speedChoices,   selected = speedIdx },
+		{ name = "Turn",   choices = TurnChoices,    selected = math.max(1, math.min(turn, #TurnChoices)) },
+		{ name = "Scroll", choices = ScrollChoices,  selected = math.max(1, math.min(scroll, #ScrollChoices)) },
+		{ name = "Gauge",  choices = GaugeChoices,   selected = gaugeIdx },
+	}
+end
+
+-- Swap Speed Value row choices based on current Speed Mode (per-player)
+local function SyncSpeedValueChoices(pn)
+	local rows = PlayerOptionRows[pn]
+	if not rows then return end
+	local modeRow = rows[1]
+	local valRow  = rows[2]
+	local mode = SpeedModes[modeRow.selected].value
+	local oldVal = valRow.choices[valRow.selected] and valRow.choices[valRow.selected].value
+	if mode == "XMod" then
+		valRow.choices = XModValues
+	else
+		valRow.choices = BPMValues
 	end
-	OptionRows[5].selected = 1
+	if oldVal then
+		valRow.selected = FindClosestIdx(valRow.choices, oldVal)
+	else
+		valRow.selected = 1
+	end
 end
 
 -- Calculate the dominant BPM of a song (statistical mode weighted by time).
@@ -335,67 +290,76 @@ local function ApplySpeedMod(pn)
 	end
 end
 
-local function ApplyMenuOptions()
-	for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
-		-- Speed: store mode/value in GalaxyOptions, then apply
-		local mode = SpeedModes[OptionRows[1].selected].value
-		local val  = OptionRows[2].choices[OptionRows[2].selected].value
-		GalaxyOptions[pn].SpeedMode  = mode
-		GalaxyOptions[pn].SpeedValue = val
-		ApplySpeedMod(pn)
+-- ===== SIDE MENU FUNCTIONS =====
 
-		-- Turn: clear all, then apply
-		GAMESTATE:ApplyPreferredModifiers(pn, "NoMirror,NoLeft,NoRight,NoShuffle,NoSuperShuffle")
-		local turnMod = TurnChoices[OptionRows[3].selected].mod
-		if turnMod ~= "" then
-			GAMESTATE:ApplyPreferredModifiers(pn, turnMod)
-		end
+-- Apply the options from a player's OptionRows into GalaxyOptions and game state
+local function ApplyMenuOptions(pn)
+	local rows = PlayerOptionRows[pn]
+	if not rows then return end
 
-		-- Scroll
-		local scrollMod = ScrollChoices[OptionRows[4].selected].mod
-		if scrollMod == "Reverse" then
-			GAMESTATE:ApplyPreferredModifiers(pn, "Reverse")
-		else
-			GAMESTATE:ApplyPreferredModifiers(pn, "NoReverse")
-		end
+	-- Speed: store mode/value in GalaxyOptions, then apply
+	local mode = SpeedModes[rows[1].selected].value
+	local val  = rows[2].choices[rows[2].selected].value
+	GalaxyOptions[pn].SpeedMode  = mode
+	GalaxyOptions[pn].SpeedValue = val
+	ApplySpeedMod(pn)
 
-		-- Gauge: store in global table for GaugeState to read
-		GalaxyOptions[pn].Gauge = GaugeChoices[OptionRows[5].selected].value
+	-- Turn: clear all, then apply
+	GAMESTATE:ApplyPreferredModifiers(pn, "NoMirror,NoLeft,NoRight,NoShuffle,NoSuperShuffle")
+	local turnMod = TurnChoices[rows[3].selected].mod
+	if turnMod ~= "" then
+		GAMESTATE:ApplyPreferredModifiers(pn, turnMod)
+	end
+
+	-- Scroll
+	local scrollMod = ScrollChoices[rows[4].selected].mod
+	if scrollMod == "Reverse" then
+		GAMESTATE:ApplyPreferredModifiers(pn, "Reverse")
+	else
+		GAMESTATE:ApplyPreferredModifiers(pn, "NoReverse")
+	end
+
+	-- Gauge: store in global table for GaugeState to read
+	GalaxyOptions[pn].Gauge = GaugeChoices[rows[5].selected].value
+
+	-- Turn/Scroll indices stored in GalaxyOptions for profile save
+	GalaxyOptions[pn].Turn   = rows[3].selected
+	GalaxyOptions[pn].Scroll = rows[4].selected
+end
+
+local function RefreshMenu(pn)
+	if not MenuFrame[pn] then return end
+	MenuFrame[pn]:playcommand("Refresh")
+end
+
+local function OpenMenu(pn)
+	-- Build fresh OptionRows from this player's saved options
+	PlayerOptionRows[pn] = BuildOptionRowsForPlayer(pn)
+	MenuOpen[pn] = true
+	MenuRow[pn] = 1
+	if MenuFrame[pn] then
+		MenuFrame[pn]:visible(true)
+		RefreshMenu(pn)
 	end
 end
 
-local function RefreshMenu()
-	if not MenuFrame then return end
-	MenuFrame:playcommand("Refresh")
-end
-
-local function OpenMenu(playerNum)
-	ReadCurrentSpeed()
-	ReadCurrentGauge()
-	MenuOpen = true
-	MenuRow = 1
-	if MenuFrame then
-		-- Position based on which player opened the menu
-		local isP1 = (playerNum == PLAYER_1)
-		MenuFrame:x(isP1 and (MENU_X_LEFT - MENU_X) or 0)
-		MenuFrame:visible(true)
-		RefreshMenu()
-	end
-end
-
-local function CloseMenu(apply)
+local function CloseMenu(pn, apply)
 	if apply then
-		ApplyMenuOptions()
-		-- Persist to ThemePrefs for next session
-		SetGalaxyPref("SpeedMode",  SpeedModes[OptionRows[1].selected].value)
-		SetGalaxyPref("SpeedValue", OptionRows[2].choices[OptionRows[2].selected].value)
-		SetGalaxyPref("Turn",       OptionRows[3].selected)
-		SetGalaxyPref("Scroll",     OptionRows[4].selected)
-		SetGalaxyPref("Gauge",      GaugeChoices[OptionRows[5].selected].value)
-		SaveGalaxyPrefs()
+		ApplyMenuOptions(pn)
+		-- Persist to profile (no-op for guest players)
+		SaveGalaxyPlayerPrefs(pn)
 	end
-	MenuOpen = false
-	if MenuFrame then MenuFrame:visible(false) end
+	MenuOpen[pn] = false
+	PlayerOptionRows[pn] = nil
+	if MenuFrame[pn] then MenuFrame[pn]:visible(false) end
+end
+
+-- Check if ANY player's menu is open (blocks grid navigation)
+local function AnyMenuOpen()
+	for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
+		if MenuOpen[pn] then return true end
+	end
+	return false
 end
 
 -- ===== SONG PREVIEW =====
@@ -435,42 +399,49 @@ local function GetDiffLabel(steps)
 end
 
 local function RefreshDiffPicker()
-	if not DiffFrame then return end
-	DiffFrame:playcommand("RefreshDiff")
+	for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
+		if DiffFrame[pn] then DiffFrame[pn]:playcommand("RefreshDiff") end
+	end
 end
 
 local function OpenDiffPicker(song, stepsArray)
 	DiffSong = song
 	DiffSteps = stepsArray
-	DiffPickIdx = 1
-	-- Try to default to preferred difficulty or middle entry
-	local pn = GAMESTATE:GetMasterPlayerNumber()
-	local pref = GAMESTATE:GetPreferredDifficulty(pn)
-	if pref then
-		for i, st in ipairs(DiffSteps) do
-			if st:GetDifficulty() == pref then
-				DiffPickIdx = i
-				break
+	-- Initialize each enabled player's cursor to their preferred difficulty
+	for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
+		DiffPickIdx[pn] = 1
+		local pref = GAMESTATE:GetPreferredDifficulty(pn)
+		if pref then
+			for i, st in ipairs(DiffSteps) do
+				if st:GetDifficulty() == pref then
+					DiffPickIdx[pn] = i
+					break
+				end
 			end
 		end
 	end
 	DiffPickOpen = true
-	if DiffFrame then DiffFrame:visible(true) end
+	for _, p in ipairs(GAMESTATE:GetEnabledPlayers()) do
+		if DiffFrame[p] then DiffFrame[p]:visible(true) end
+	end
 	RefreshDiffPicker()
 end
 
 local function CloseDiffPicker()
 	DiffPickOpen = false
-	if DiffFrame then DiffFrame:visible(false) end
+	for _, p in ipairs(GAMESTATE:GetEnabledPlayers()) do
+		if DiffFrame[p] then DiffFrame[p]:visible(false) end
+	end
 end
 
 local function ConfirmDifficulty()
 	if Accepted then return end
-	local steps = DiffSteps[DiffPickIdx]
-	if not steps then return end
 	GAMESTATE:SetCurrentSong(DiffSong)
 	GAMESTATE:SetCurrentPlayMode("PlayMode_Regular")
 	for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
+		local idx = DiffPickIdx[pn] or 1
+		local steps = DiffSteps[idx]
+		if not steps then return end
 		GAMESTATE:SetCurrentSteps(pn, steps)
 		GAMESTATE:SetPreferredDifficulty(pn, steps:GetDifficulty())
 		-- Re-apply speed mod now that song is set (important for Real Speed)
@@ -838,29 +809,33 @@ local function InputHandler(event)
 
 	local btn = event.GameButton
 	if not btn then return false end
+	if not event.PlayerNumber then return false end
 	if not GAMESTATE:IsPlayerEnabled(event.PlayerNumber) then return false end
 
-	-- Select button toggles the side menu
+	local pn = event.PlayerNumber
+
+	-- Select button toggles the side menu for the pressing player
 	if btn == "Select" then
 		if DiffPickOpen then return true end  -- block Select during diff pick
-		if not MenuOpen then
-			OpenMenu(event.PlayerNumber)
+		if not MenuOpen[pn] then
+			OpenMenu(pn)
 		else
-			CloseMenu(true)
+			CloseMenu(pn, true)
 		end
 		return true
 	end
 
-	-- When difficulty picker is open, route input there
+	-- When difficulty picker is open, route input per-player
 	if DiffPickOpen then
+		if AnyMenuOpen() then return true end
 		if btn == "MenuUp" or btn == "MenuLeft" then
-			DiffPickIdx = DiffPickIdx - 1
-			if DiffPickIdx < 1 then DiffPickIdx = #DiffSteps end
+			DiffPickIdx[pn] = (DiffPickIdx[pn] or 1) - 1
+			if DiffPickIdx[pn] < 1 then DiffPickIdx[pn] = #DiffSteps end
 			SOUND:PlayOnce(THEME:GetPathS("","_switch down"))
 			RefreshDiffPicker()
 		elseif btn == "MenuDown" or btn == "MenuRight" then
-			DiffPickIdx = DiffPickIdx + 1
-			if DiffPickIdx > #DiffSteps then DiffPickIdx = 1 end
+			DiffPickIdx[pn] = (DiffPickIdx[pn] or 1) + 1
+			if DiffPickIdx[pn] > #DiffSteps then DiffPickIdx[pn] = 1 end
 			SOUND:PlayOnce(THEME:GetPathS("","_switch down"))
 			RefreshDiffPicker()
 		elseif btn == "Start" then
@@ -872,41 +847,45 @@ local function InputHandler(event)
 		return true
 	end
 
-	-- When menu is open, route all input to menu
-	if MenuOpen then
+	-- When this player's menu is open, route their input to their menu
+	if MenuOpen[pn] then
+		local rows = PlayerOptionRows[pn]
 		if btn == "MenuUp" then
-			MenuRow = MenuRow - 1
-			if MenuRow < 1 then MenuRow = #OptionRows end
+			MenuRow[pn] = MenuRow[pn] - 1
+			if MenuRow[pn] < 1 then MenuRow[pn] = #rows end
 			SOUND:PlayOnce(THEME:GetPathS("","_switch down"))
-			RefreshMenu()
+			RefreshMenu(pn)
 		elseif btn == "MenuDown" then
-			MenuRow = MenuRow + 1
-			if MenuRow > #OptionRows then MenuRow = 1 end
+			MenuRow[pn] = MenuRow[pn] + 1
+			if MenuRow[pn] > #rows then MenuRow[pn] = 1 end
 			SOUND:PlayOnce(THEME:GetPathS("","_switch down"))
-			RefreshMenu()
+			RefreshMenu(pn)
 		elseif btn == "MenuLeft" then
-			local row = OptionRows[MenuRow]
+			local row = rows[MenuRow[pn]]
 			row.selected = row.selected - 1
 			if row.selected < 1 then row.selected = #row.choices end
 			-- When Speed Mode changes, update Speed Value choices
-			if MenuRow == 1 then SyncSpeedValueChoices() end
+			if MenuRow[pn] == 1 then SyncSpeedValueChoices(pn) end
 			SOUND:PlayOnce(THEME:GetPathS("","_switch down"))
-			RefreshMenu()
+			RefreshMenu(pn)
 		elseif btn == "MenuRight" then
-			local row = OptionRows[MenuRow]
+			local row = rows[MenuRow[pn]]
 			row.selected = row.selected + 1
 			if row.selected > #row.choices then row.selected = 1 end
 			-- When Speed Mode changes, update Speed Value choices
-			if MenuRow == 1 then SyncSpeedValueChoices() end
+			if MenuRow[pn] == 1 then SyncSpeedValueChoices(pn) end
 			SOUND:PlayOnce(THEME:GetPathS("","_switch down"))
-			RefreshMenu()
+			RefreshMenu(pn)
 		elseif btn == "Start" then
-			CloseMenu(true)
+			CloseMenu(pn, true)
 		elseif btn == "Back" then
-			CloseMenu(false)
+			CloseMenu(pn, false)
 		end
-		return true  -- eat all input when menu is open
+		return true  -- eat all input when this player's menu is open
 	end
+
+	-- Block grid navigation while any player has their menu open
+	if AnyMenuOpen() then return true end
 
 	if btn == "MenuRight" then
 		MoveCursor(1)
@@ -1064,33 +1043,47 @@ local function MakeGroupHeader(name)
 end
 
 -- ===== SIDE MENU ACTOR =====
-local function MakeMenu()
-	local numRows = #OptionRows
+local MENU_ROW_NAMES = {"Mode", "Speed", "Turn", "Scroll", "Gauge"}
+local MENU_NUM_ROWS  = #MENU_ROW_NAMES
+
+local function MakeMenu(pn)
+	local numRows = MENU_NUM_ROWS
 	local totalH = MENU_PAD + 36 + numRows * MENU_ROW_H + MENU_PAD + 28 + MENU_PAD
 	local topY = SCREEN_CENTER_Y - totalH/2
 	local centerY = topY + totalH/2
+	-- P1 left, P2 right; single player always right side
+	local menuX
+	if GAMESTATE:GetNumPlayersEnabled() > 1 then
+		menuX = (pn == PLAYER_1) and MENU_X_LEFT or MENU_X
+	else
+		menuX = MENU_X
+	end
 
 	local m = Def.ActorFrame{
-		Name = "SideMenu",
+		Name = "SideMenu_"..ToEnumShortString(pn),
 		InitCommand = function(self)
-			MenuFrame = self
+			MenuFrame[pn] = self
 			self:visible(false)
 		end,
 		RefreshCommand = function(self)
-			for i, row in ipairs(OptionRows) do
+			local rows = PlayerOptionRows[pn]
+			if not rows then return end
+			for i = 1, numRows do
+				local row = rows[i]
 				local rowBG = self:GetChild("RowBG"..i)
 				local label = self:GetChild("Label"..i)
 				local value = self:GetChild("Value"..i)
 				if rowBG then
-					rowBG:diffuse(i == MenuRow and color("#333366") or color("#00000000"))
+					rowBG:diffuse(i == MenuRow[pn] and color("#333366") or color("#00000000"))
 				end
 				if label then
-					label:diffuse(i == MenuRow and Color.White or color("#888888"))
+					label:settext(row and row.name or MENU_ROW_NAMES[i])
+					label:diffuse(i == MenuRow[pn] and Color.White or color("#888888"))
 				end
 				if value then
-					local ch = row.choices[row.selected]
+					local ch = row and row.choices[row.selected]
 					value:settext(ch and ch.label or "")
-					value:diffuse(i == MenuRow and Color.White or color("#aaaaaa"))
+					value:diffuse(i == MenuRow[pn] and Color.White or color("#aaaaaa"))
 				end
 			end
 		end,
@@ -1098,7 +1091,7 @@ local function MakeMenu()
 		-- Border
 		Def.Quad{
 			InitCommand = function(self)
-				self:xy(MENU_X, centerY)
+				self:xy(menuX, centerY)
 					:zoomto(MENU_W + 2, totalH + 2)
 					:diffuse(color("#444466"))
 			end,
@@ -1106,7 +1099,7 @@ local function MakeMenu()
 		-- Background
 		Def.Quad{
 			InitCommand = function(self)
-				self:xy(MENU_X, centerY)
+				self:xy(menuX, centerY)
 					:zoomto(MENU_W, totalH)
 					:diffuse(color("#0a0a18"))
 					:diffusealpha(0.95)
@@ -1115,7 +1108,7 @@ local function MakeMenu()
 		-- Title
 		LoadFont("Common Normal") .. {
 			InitCommand = function(self)
-				self:xy(MENU_X, topY + MENU_PAD + 14)
+				self:xy(menuX, topY + MENU_PAD + 14)
 					:zoom(0.7)
 					:settext("OPTIONS")
 					:diffuse(Color.White)
@@ -1125,22 +1118,22 @@ local function MakeMenu()
 		-- Divider line under title
 		Def.Quad{
 			InitCommand = function(self)
-				self:xy(MENU_X, topY + MENU_PAD + 32)
+				self:xy(menuX, topY + MENU_PAD + 32)
 					:zoomto(MENU_W - 24, 1)
 					:diffuse(color("#444466"))
 			end,
 		},
 	}
 
-	-- Option rows
-	for i, row in ipairs(OptionRows) do
+	-- Option rows (static layout; values filled by RefreshCommand)
+	for i = 1, numRows do
 		local rowY = topY + MENU_PAD + 36 + (i - 1) * MENU_ROW_H + MENU_ROW_H/2
 
 		-- Row highlight
 		m[#m+1] = Def.Quad{
 			Name = "RowBG"..i,
 			InitCommand = function(self)
-				self:xy(MENU_X, rowY)
+				self:xy(menuX, rowY)
 					:zoomto(MENU_W - 8, MENU_ROW_H - 4)
 					:diffuse(color("#00000000"))
 			end,
@@ -1149,22 +1142,22 @@ local function MakeMenu()
 		m[#m+1] = LoadFont("Common Normal") .. {
 			Name = "Label"..i,
 			InitCommand = function(self)
-				self:xy(MENU_X - MENU_W/2 + MENU_PAD + 8, rowY)
+				self:xy(menuX - MENU_W/2 + MENU_PAD + 8, rowY)
 					:zoom(0.6)
 					:halign(0)
-					:settext(row.name)
+					:settext(MENU_ROW_NAMES[i])
 					:diffuse(color("#888888"))
 					:shadowlength(1)
 			end,
 		}
-		-- Value with arrows
+		-- Value (populated by Refresh)
 		m[#m+1] = LoadFont("Common Normal") .. {
 			Name = "Value"..i,
 			InitCommand = function(self)
-				self:xy(MENU_X + MENU_W/2 - MENU_PAD - 8, rowY)
+				self:xy(menuX + MENU_W/2 - MENU_PAD - 8, rowY)
 					:zoom(0.55)
 					:halign(1)
-					:settext(row.choices[row.selected].label)
+					:settext("")
 					:maxwidth(220/0.55)
 					:diffuse(color("#aaaaaa"))
 					:shadowlength(1)
@@ -1176,20 +1169,22 @@ local function MakeMenu()
 	m[#m+1] = LoadFont("Common Normal") .. {
 		Name = "ArrowL",
 		InitCommand = function(self)
-			self:xy(MENU_X + 40, 0):zoom(0.6):settext("<"):diffuse(color("#666688"))
+			self:xy(menuX + 40, 0):zoom(0.6):settext("<"):diffuse(color("#666688"))
 		end,
 		RefreshCommand = function(self)
-			local rowY = topY + MENU_PAD + 36 + (MenuRow - 1) * MENU_ROW_H + MENU_ROW_H/2
+			local mr = MenuRow[pn] or 1
+			local rowY = topY + MENU_PAD + 36 + (mr - 1) * MENU_ROW_H + MENU_ROW_H/2
 			self:y(rowY)
 		end,
 	}
 	m[#m+1] = LoadFont("Common Normal") .. {
 		Name = "ArrowR",
 		InitCommand = function(self)
-			self:xy(MENU_X + MENU_W/2 - MENU_PAD + 4, 0):zoom(0.6):settext(">"):diffuse(color("#666688"))
+			self:xy(menuX + MENU_W/2 - MENU_PAD + 4, 0):zoom(0.6):settext(">"):diffuse(color("#666688"))
 		end,
 		RefreshCommand = function(self)
-			local rowY = topY + MENU_PAD + 36 + (MenuRow - 1) * MENU_ROW_H + MENU_ROW_H/2
+			local mr = MenuRow[pn] or 1
+			local rowY = topY + MENU_PAD + 36 + (mr - 1) * MENU_ROW_H + MENU_ROW_H/2
 			self:y(rowY)
 		end,
 	}
@@ -1198,7 +1193,7 @@ local function MakeMenu()
 	m[#m+1] = LoadFont("Common Normal") .. {
 		InitCommand = function(self)
 			local footY = topY + MENU_PAD + 36 + numRows * MENU_ROW_H + MENU_PAD + 8
-			self:xy(MENU_X, footY)
+			self:xy(menuX, footY)
 				:zoom(0.38)
 				:settext("Select/Start: Confirm   Back: Cancel")
 				:diffuse(color("#555566"))
@@ -1295,126 +1290,148 @@ end
 -- Wrap in outer frame so menu is not affected by grid scroll animation
 local outer = Def.ActorFrame{ Name = "MusicSelectRoot" }
 outer[#outer+1] = t
-outer[#outer+1] = MakeMenu()
+outer[#outer+1] = MakeMenu(PLAYER_1)
+outer[#outer+1] = MakeMenu(PLAYER_2)
 
 -- ===== DIFFICULTY PICKER ACTOR =====
--- Centered overlay showing all available difficulties for the chosen song.
--- Max 6 difficulties (Beginner/Easy/Medium/Hard/Challenge/Edit).
+-- Per-player difficulty picker boxes.
+-- 1-player: single centered box.  2-player: two side-by-side boxes.
 local DIFF_ROW_H = 52
-local DIFF_W     = 350
+local DIFF_W     = 320
 local MAX_DIFFS  = 6
 
-local diffPicker = Def.ActorFrame{
-	Name = "DiffPicker",
-	InitCommand = function(self)
-		DiffFrame = self
-		self:visible(false)
-	end,
-	RefreshDiffCommand = function(self)
-		local n = #DiffSteps
-		local totalH = n * DIFF_ROW_H + 60
-		local topY = SCREEN_CENTER_Y - totalH/2
-
-		-- Update background size
-		local bg = self:GetChild("DiffBG")
-		local border = self:GetChild("DiffBorder")
-		if bg then bg:y(SCREEN_CENTER_Y):zoomto(DIFF_W, totalH) end
-		if border then border:y(SCREEN_CENTER_Y):zoomto(DIFF_W + 2, totalH + 2) end
-
-		-- Update title
-		local title = self:GetChild("DiffTitle")
-		if title then
-			local songName = DiffSong and DiffSong:GetDisplayMainTitle() or ""
-			title:y(topY + 20):settext(songName)
-		end
-
-		-- Update rows
-		for i = 1, MAX_DIFFS do
-			local rowBG   = self:GetChild("DiffRowBG"..i)
-			local label   = self:GetChild("DiffLabel"..i)
-			local meter   = self:GetChild("DiffMeter"..i)
-			if i <= n then
-				local st = DiffSteps[i]
-				local dc = GetDiffColor(st)
-				local rowY = topY + 40 + (i - 1) * DIFF_ROW_H + DIFF_ROW_H/2
-				if rowBG then
-					rowBG:visible(true):y(rowY)
-					rowBG:diffuse(i == DiffPickIdx and color("#333366") or color("#00000000"))
-				end
-				if label then
-					label:visible(true):y(rowY)
-					local short = ToEnumShortString(st:GetDifficulty())
-					label:settext(short)
-					label:diffuse(i == DiffPickIdx and dc or color("#888888"))
-				end
-				if meter then
-					meter:visible(true):y(rowY)
-					meter:settext(tostring(st:GetMeter()))
-					meter:diffuse(i == DiffPickIdx and dc or color("#666666"))
-				end
-			else
-				if rowBG then rowBG:visible(false) end
-				if label then label:visible(false) end
-				if meter then meter:visible(false) end
-			end
-		end
-	end,
-
-	-- Border
-	Def.Quad{
-		Name = "DiffBorder",
-		InitCommand = function(self)
-			self:x(SCREEN_CENTER_X):zoomto(DIFF_W + 2, 200):diffuse(color("#444466"))
-		end,
-	},
-	-- Background
-	Def.Quad{
-		Name = "DiffBG",
-		InitCommand = function(self)
-			self:x(SCREEN_CENTER_X):zoomto(DIFF_W, 200)
-				:diffuse(color("#0a0a18")):diffusealpha(0.97)
-		end,
-	},
-	-- Song title
-	LoadFont("Common Normal") .. {
-		Name = "DiffTitle",
-		InitCommand = function(self)
-			self:x(SCREEN_CENTER_X):zoom(0.6)
-				:maxwidth(DIFF_W / 0.6 - 40)
-				:diffuse(Color.White):shadowlength(1)
-		end,
-	},
+local DIFF_PLAYER_COLORS = {
+	[PLAYER_1] = { border = color("#334488"), highlight = color("#333366"), label = "P1" },
+	[PLAYER_2] = { border = color("#883344"), highlight = color("#663333"), label = "P2" },
 }
 
--- Difficulty rows
-for i = 1, MAX_DIFFS do
-	-- Row highlight
-	diffPicker[#diffPicker+1] = Def.Quad{
-		Name = "DiffRowBG"..i,
+local function MakeDiffPicker(pn)
+	local isVersus = GAMESTATE:GetNumPlayersEnabled() > 1
+	-- X position: centered for solo, offset for versus
+	local boxX
+	if isVersus then
+		boxX = (pn == PLAYER_1) and (SCREEN_CENTER_X - DIFF_W/2 - 20)
+		                           or (SCREEN_CENTER_X + DIFF_W/2 + 20)
+	else
+		boxX = SCREEN_CENTER_X
+	end
+	local pColors = DIFF_PLAYER_COLORS[pn]
+
+	local m = Def.ActorFrame{
+		Name = "DiffPicker_"..ToEnumShortString(pn),
 		InitCommand = function(self)
-			self:x(SCREEN_CENTER_X):zoomto(DIFF_W - 8, DIFF_ROW_H - 6)
-				:visible(false)
+			DiffFrame[pn] = self
+			self:visible(false)
 		end,
-	}
-	-- Difficulty name
-	diffPicker[#diffPicker+1] = LoadFont("Common Normal") .. {
-		Name = "DiffLabel"..i,
-		InitCommand = function(self)
-			self:x(SCREEN_CENTER_X - DIFF_W/2 + 20):zoom(0.65)
-				:halign(0):shadowlength(1):visible(false)
+		RefreshDiffCommand = function(self)
+			local n = #DiffSteps
+			local totalH = n * DIFF_ROW_H + 60
+			local topY = SCREEN_CENTER_Y - totalH/2
+
+			-- Background / border sizing
+			local bg     = self:GetChild("DiffBG")
+			local border = self:GetChild("DiffBorder")
+			if bg     then bg:y(SCREEN_CENTER_Y):zoomto(DIFF_W, totalH) end
+			if border then border:y(SCREEN_CENTER_Y):zoomto(DIFF_W + 2, totalH + 2) end
+
+			-- Title
+			local title = self:GetChild("DiffTitle")
+			if title then
+				local songName = DiffSong and DiffSong:GetDisplayMainTitle() or ""
+				local heading = isVersus and (pColors.label.." - "..songName) or songName
+				title:y(topY + 20):settext(heading)
+			end
+
+			local selIdx = DiffPickIdx[pn] or 1
+
+			-- Rows
+			for i = 1, MAX_DIFFS do
+				local rowBG = self:GetChild("DiffRowBG"..i)
+				local label = self:GetChild("DiffLabel"..i)
+				local meter = self:GetChild("DiffMeter"..i)
+				if i <= n then
+					local st  = DiffSteps[i]
+					local dc  = GetDiffColor(st)
+					local rowY = topY + 40 + (i - 1) * DIFF_ROW_H + DIFF_ROW_H/2
+					local sel = (i == selIdx)
+					if rowBG then
+						rowBG:visible(true):y(rowY)
+						rowBG:diffuse(sel and pColors.highlight or color("#00000000"))
+					end
+					if label then
+						label:visible(true):y(rowY)
+						label:settext(ToEnumShortString(st:GetDifficulty()))
+						label:diffuse(sel and dc or color("#888888"))
+					end
+					if meter then
+						meter:visible(true):y(rowY)
+						meter:settext(tostring(st:GetMeter()))
+						meter:diffuse(sel and dc or color("#666666"))
+					end
+				else
+					if rowBG then rowBG:visible(false) end
+					if label then label:visible(false) end
+					if meter then meter:visible(false) end
+				end
+			end
 		end,
+
+		-- Border
+		Def.Quad{
+			Name = "DiffBorder",
+			InitCommand = function(self)
+				self:x(boxX):zoomto(DIFF_W + 2, 200)
+					:diffuse(isVersus and pColors.border or color("#444466"))
+			end,
+		},
+		-- Background
+		Def.Quad{
+			Name = "DiffBG",
+			InitCommand = function(self)
+				self:x(boxX):zoomto(DIFF_W, 200)
+					:diffuse(color("#0a0a18")):diffusealpha(0.97)
+			end,
+		},
+		-- Title / player heading
+		LoadFont("Common Normal") .. {
+			Name = "DiffTitle",
+			InitCommand = function(self)
+				self:x(boxX):zoom(0.6)
+					:maxwidth(DIFF_W / 0.6 - 40)
+					:diffuse(Color.White):shadowlength(1)
+			end,
+		},
 	}
-	-- Meter number
-	diffPicker[#diffPicker+1] = LoadFont("Common Normal") .. {
-		Name = "DiffMeter"..i,
-		InitCommand = function(self)
-			self:x(SCREEN_CENTER_X + DIFF_W/2 - 20):zoom(0.7)
-				:halign(1):shadowlength(1):visible(false)
-		end,
-	}
+
+	-- Difficulty rows
+	for i = 1, MAX_DIFFS do
+		m[#m+1] = Def.Quad{
+			Name = "DiffRowBG"..i,
+			InitCommand = function(self)
+				self:x(boxX):zoomto(DIFF_W - 8, DIFF_ROW_H - 6):visible(false)
+			end,
+		}
+		m[#m+1] = LoadFont("Common Normal") .. {
+			Name = "DiffLabel"..i,
+			InitCommand = function(self)
+				self:x(boxX - DIFF_W/2 + 20):zoom(0.65)
+					:halign(0):shadowlength(1):visible(false)
+			end,
+		}
+		m[#m+1] = LoadFont("Common Normal") .. {
+			Name = "DiffMeter"..i,
+			InitCommand = function(self)
+				self:x(boxX + DIFF_W/2 - 20):zoom(0.7)
+					:halign(1):shadowlength(1):visible(false)
+			end,
+		}
+	end
+
+	return m
 end
 
-outer[#outer+1] = diffPicker
+outer[#outer+1] = MakeDiffPicker(PLAYER_1)
+outer[#outer+1] = MakeDiffPicker(PLAYER_2)
 
 -- ===== SONG INFO PANEL =====
 -- Displays song name, artist, and BPM breakdown to the left of the grid.
