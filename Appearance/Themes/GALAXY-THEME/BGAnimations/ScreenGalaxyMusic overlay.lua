@@ -76,22 +76,61 @@ local DiffColors = {
 -- Global options table — read by 04 GaugeState.lua and gameplay decorations
 GalaxyOptions = GalaxyOptions or {}
 for _, pn in ipairs({PLAYER_1, PLAYER_2}) do
-	GalaxyOptions[pn] = GalaxyOptions[pn] or { Gauge = "Normal" }
+	GalaxyOptions[pn] = GalaxyOptions[pn] or { Gauge = "Normal", SpeedMode = "XMod", SpeedValue = 2.0 }
+	-- Ensure speed fields exist for tables created before this version
+	if not GalaxyOptions[pn].SpeedMode then GalaxyOptions[pn].SpeedMode = "XMod" end
+	if not GalaxyOptions[pn].SpeedValue then GalaxyOptions[pn].SpeedValue = 2.0 end
 end
 
 -- Cursor persistence across screen transitions
 GalaxyCursorState = GalaxyCursorState or {}
 
 -- ===== SIDE MENU OPTION DEFINITIONS =====
-local SpeedChoices = {}
+local OptionRows    -- forward-declare so SyncSpeedValueChoices can close over it
+
+local SpeedModes = {
+	{ label = "XMod",  value = "XMod" },
+	{ label = "CMod",  value = "CMod" },
+	{ label = "MMod",  value = "MMod" },
+	{ label = "Real",  value = "Real" },
+}
+
+local XModValues = {}
 do
-	local speeds = {
-		0.25, 0.50, 0.75, 1.00, 1.25, 1.50, 1.75, 2.00,
-		2.25, 2.50, 2.75, 3.00, 3.50, 4.00, 4.50, 5.00,
-		5.50, 6.00, 7.00, 8.00,
-	}
-	for _, v in ipairs(speeds) do
-		SpeedChoices[#SpeedChoices+1] = { label = string.format("x%.2f", v), value = v }
+	for v = 25, 800, 25 do  -- 0.25x to 8.00x in 0.25 increments (DDR-style)
+		XModValues[#XModValues+1] = { label = string.format("x%.2f", v/100), value = v/100 }
+	end
+end
+
+local BPMValues = {}  -- shared for CMod, MMod, Real Speed
+do
+	for v = 50, 1200, 25 do
+		BPMValues[#BPMValues+1] = { label = tostring(v), value = v }
+	end
+end
+
+-- Swap Speed Value row choices based on current Speed Mode
+local function SyncSpeedValueChoices()
+	local modeRow = OptionRows and OptionRows[1]
+	local valRow  = OptionRows and OptionRows[2]
+	if not modeRow or not valRow then return end
+	local mode = SpeedModes[modeRow.selected].value
+	local oldVal = valRow.choices[valRow.selected] and valRow.choices[valRow.selected].value
+	if mode == "XMod" then
+		valRow.choices = XModValues
+	else
+		valRow.choices = BPMValues
+	end
+	-- Find closest value in new choices
+	if oldVal then
+		local bestIdx, bestDist = 1, 999999
+		for i, c in ipairs(valRow.choices) do
+			local d = math.abs(c.value - oldVal)
+			if d < bestDist then bestIdx, bestDist = i, d end
+		end
+		valRow.selected = bestIdx
+	else
+		valRow.selected = 1
 	end
 end
 
@@ -125,8 +164,9 @@ local GaugeChoices = {
 	{ label = "Risky",      value = "Risky" },
 }
 
-local OptionRows = {
-	{ name = "Speed",  choices = SpeedChoices,  selected = 6 },   -- x1.50 default
+OptionRows = {
+	{ name = "Mode",   choices = SpeedModes,    selected = 1 },   -- XMod default
+	{ name = "Speed",  choices = XModValues,    selected = 8 },   -- x2.00 default
 	{ name = "Turn",   choices = TurnChoices,   selected = 1 },
 	{ name = "Scroll", choices = ScrollChoices,  selected = 1 },
 	{ name = "Gauge",  choices = GaugeChoices,  selected = 1 },
@@ -135,16 +175,30 @@ local OptionRows = {
 -- ===== SIDE MENU FUNCTIONS =====
 local function ReadCurrentSpeed()
 	local pn = GAMESTATE:GetMasterPlayerNumber()
-	local po = GAMESTATE:GetPlayerState(pn):GetPlayerOptions('ModsLevel_Preferred')
-	local xmod = po:XMod()
-	if xmod and xmod > 0 then
-		local bestIdx, bestDist = 1, 999
-		for i, c in ipairs(SpeedChoices) do
-			local dist = math.abs(c.value - xmod)
-			if dist < bestDist then bestIdx, bestDist = i, dist end
+	local opts = GalaxyOptions[pn]
+	local mode = opts and opts.SpeedMode or "XMod"
+	local val  = opts and opts.SpeedValue or 2.0
+
+	-- Set Speed Mode row
+	for i, c in ipairs(SpeedModes) do
+		if c.value == mode then
+			OptionRows[1].selected = i
+			break
 		end
-		OptionRows[1].selected = bestIdx
 	end
+
+	-- Set Speed Value row choices and find closest value
+	if mode == "XMod" then
+		OptionRows[2].choices = XModValues
+	else
+		OptionRows[2].choices = BPMValues
+	end
+	local bestIdx, bestDist = 1, 999999
+	for i, c in ipairs(OptionRows[2].choices) do
+		local d = math.abs(c.value - val)
+		if d < bestDist then bestIdx, bestDist = i, d end
+	end
+	OptionRows[2].selected = bestIdx
 end
 
 local function ReadCurrentGauge()
@@ -152,28 +206,116 @@ local function ReadCurrentGauge()
 	local current = GalaxyOptions[pn] and GalaxyOptions[pn].Gauge or "Normal"
 	for i, c in ipairs(GaugeChoices) do
 		if c.value == current then
-			OptionRows[4].selected = i
+			OptionRows[5].selected = i
 			return
 		end
 	end
-	OptionRows[4].selected = 1
+	OptionRows[5].selected = 1
+end
+
+-- Calculate the dominant BPM of a song (statistical mode weighted by time).
+-- Walks all BPM change points, accumulates wall-clock seconds spent at each
+-- BPM value (rounded to 1 decimal to merge near-identical values), and returns
+-- the BPM that occupies the most total time.
+local function GetDominantBPM(song)
+	local td = song:GetTimingData()
+	if not td then return nil end
+
+	local segments = td:GetBPMsAndTimes(true)  -- {{beat, bpm}, ...}
+	if not segments or #segments == 0 then return nil end
+
+	local lastBeat = song:GetLastBeat()
+	if not lastBeat or lastBeat <= 0 then return nil end
+
+	-- Accumulate seconds spent at each BPM (rounded to 0.1 for bucketing)
+	local timeAtBPM = {}  -- key = rounded BPM string, value = {seconds, bpm}
+	for i, seg in ipairs(segments) do
+		local beatStart = seg[1]
+		local bpm       = seg[2]
+		local beatEnd   = (segments[i+1] and segments[i+1][1]) or lastBeat
+		local beatSpan  = beatEnd - beatStart
+		if beatSpan > 0 and bpm > 0 then
+			local seconds = beatSpan / bpm * 60.0
+			local key = string.format("%.1f", bpm)
+			if not timeAtBPM[key] then
+				timeAtBPM[key] = { seconds = 0, bpm = bpm }
+			end
+			timeAtBPM[key].seconds = timeAtBPM[key].seconds + seconds
+		end
+	end
+
+	-- Find the BPM with the most accumulated time
+	local bestBPM, bestTime = nil, 0
+	for _, entry in pairs(timeAtBPM) do
+		if entry.seconds > bestTime then
+			bestTime = entry.seconds
+			bestBPM  = entry.bpm
+		end
+	end
+
+	return bestBPM
+end
+
+-- Apply a speed mod to a single player based on GalaxyOptions
+local function ApplySpeedMod(pn)
+	local opts = GalaxyOptions[pn]
+	local mode = opts.SpeedMode or "XMod"
+	local val  = opts.SpeedValue or 2.0
+
+	if mode == "XMod" then
+		GAMESTATE:ApplyPreferredModifiers(pn, string.format("%.2fx", val))
+	elseif mode == "CMod" then
+		GAMESTATE:ApplyPreferredModifiers(pn, string.format("C%d", val))
+	elseif mode == "MMod" then
+		GAMESTATE:ApplyPreferredModifiers(pn, string.format("M%d", val))
+	elseif mode == "Real" then
+		-- Compute the largest 0.05-increment XMod where dominantBPM * mult < targetBPM
+		local song = GAMESTATE:GetCurrentSong()
+		if song then
+			local songBPM = GetDominantBPM(song)
+			-- Fallback to max display BPM if dominant calculation fails
+			if not songBPM or songBPM <= 0 then
+				local bpms = song:GetDisplayBpms()
+				songBPM = bpms[2]
+			end
+			if songBPM and songBPM > 0 then
+				local mult = math.floor(val / songBPM / 0.05) * 0.05
+				-- Ensure strict less-than (handle exact division)
+				if songBPM * mult >= val then
+					mult = mult - 0.05
+				end
+				mult = math.max(0.25, math.min(mult, 20.0))
+				Trace("[GALAXY] Real Speed: dominant BPM="..string.format("%.1f", songBPM)
+					.." target="..tostring(val).." mult="..string.format("%.2f", mult))
+				GAMESTATE:ApplyPreferredModifiers(pn, string.format("%.2fx", mult))
+			else
+				GAMESTATE:ApplyPreferredModifiers(pn, "1.00x")
+			end
+		else
+			-- No song selected yet — store target, will re-apply at confirm time
+			GAMESTATE:ApplyPreferredModifiers(pn, "1.00x")
+		end
+	end
 end
 
 local function ApplyMenuOptions()
 	for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
-		-- Speed
-		local speed = SpeedChoices[OptionRows[1].selected].value
-		GAMESTATE:ApplyPreferredModifiers(pn, string.format("%.2fx", speed))
+		-- Speed: store mode/value in GalaxyOptions, then apply
+		local mode = SpeedModes[OptionRows[1].selected].value
+		local val  = OptionRows[2].choices[OptionRows[2].selected].value
+		GalaxyOptions[pn].SpeedMode  = mode
+		GalaxyOptions[pn].SpeedValue = val
+		ApplySpeedMod(pn)
 
 		-- Turn: clear all, then apply
 		GAMESTATE:ApplyPreferredModifiers(pn, "NoMirror,NoLeft,NoRight,NoShuffle,NoSuperShuffle")
-		local turnMod = TurnChoices[OptionRows[2].selected].mod
+		local turnMod = TurnChoices[OptionRows[3].selected].mod
 		if turnMod ~= "" then
 			GAMESTATE:ApplyPreferredModifiers(pn, turnMod)
 		end
 
 		-- Scroll
-		local scrollMod = ScrollChoices[OptionRows[3].selected].mod
+		local scrollMod = ScrollChoices[OptionRows[4].selected].mod
 		if scrollMod == "Reverse" then
 			GAMESTATE:ApplyPreferredModifiers(pn, "Reverse")
 		else
@@ -181,7 +323,7 @@ local function ApplyMenuOptions()
 		end
 
 		-- Gauge: store in global table for GaugeState to read
-		GalaxyOptions[pn].Gauge = GaugeChoices[OptionRows[4].selected].value
+		GalaxyOptions[pn].Gauge = GaugeChoices[OptionRows[5].selected].value
 	end
 end
 
@@ -273,6 +415,8 @@ local function ConfirmDifficulty()
 	for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
 		GAMESTATE:SetCurrentSteps(pn, steps)
 		GAMESTATE:SetPreferredDifficulty(pn, steps:GetDifficulty())
+		-- Re-apply speed mod now that song is set (important for Real Speed)
+		ApplySpeedMod(pn)
 	end
 	SaveCursorState()
 	Accepted = true
@@ -582,6 +726,8 @@ local function ConfirmSong()
 		GAMESTATE:SetCurrentPlayMode("PlayMode_Regular")
 		for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
 			GAMESTATE:SetCurrentSteps(pn, stepsArray[1])
+			-- Apply speed mod now that song is set (important for Real Speed)
+			ApplySpeedMod(pn)
 		end
 		SaveCursorState()
 		Accepted = true
@@ -669,12 +815,16 @@ local function InputHandler(event)
 			local row = OptionRows[MenuRow]
 			row.selected = row.selected - 1
 			if row.selected < 1 then row.selected = #row.choices end
+			-- When Speed Mode changes, update Speed Value choices
+			if MenuRow == 1 then SyncSpeedValueChoices() end
 			SOUND:PlayOnce(THEME:GetPathS("","_switch down"))
 			RefreshMenu()
 		elseif btn == "MenuRight" then
 			local row = OptionRows[MenuRow]
 			row.selected = row.selected + 1
 			if row.selected > #row.choices then row.selected = 1 end
+			-- When Speed Mode changes, update Speed Value choices
+			if MenuRow == 1 then SyncSpeedValueChoices() end
 			SOUND:PlayOnce(THEME:GetPathS("","_switch down"))
 			RefreshMenu()
 		elseif btn == "Start" then
