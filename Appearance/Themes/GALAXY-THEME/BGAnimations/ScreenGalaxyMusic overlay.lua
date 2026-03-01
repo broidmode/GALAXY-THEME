@@ -1051,13 +1051,8 @@ local function MakeMenu(pn)
 	local totalH = MENU_PAD + 36 + numRows * MENU_ROW_H + MENU_PAD + 28 + MENU_PAD
 	local topY = SCREEN_CENTER_Y - totalH/2
 	local centerY = topY + totalH/2
-	-- P1 left, P2 right; single player always right side
-	local menuX
-	if GAMESTATE:GetNumPlayersEnabled() > 1 then
-		menuX = (pn == PLAYER_1) and MENU_X_LEFT or MENU_X
-	else
-		menuX = MENU_X
-	end
+	-- P1 always left, P2 always right
+	local menuX = (pn == PLAYER_1) and MENU_X_LEFT or MENU_X
 
 	local m = Def.ActorFrame{
 		Name = "SideMenu_"..ToEnumShortString(pn),
