@@ -74,13 +74,30 @@ local DiffColors = {
 }
 
 -- Global options table — read by 04 GaugeState.lua and gameplay decorations
+-- Load saved prefs from ThemePrefs (persisted to Save/ThemePrefs.ini)
+local savedMode  = GetGalaxyPref("SpeedMode")  or "Real"
+local savedValue = GetGalaxyPref("SpeedValue") or 500
+local savedTurn  = GetGalaxyPref("Turn")       or 1
+local savedScroll= GetGalaxyPref("Scroll")     or 1
+local savedGauge = GetGalaxyPref("Gauge")      or "Normal"
+
 GalaxyOptions = GalaxyOptions or {}
 for _, pn in ipairs({PLAYER_1, PLAYER_2}) do
-	GalaxyOptions[pn] = GalaxyOptions[pn] or { Gauge = "Normal", SpeedMode = "XMod", SpeedValue = 2.0 }
+	GalaxyOptions[pn] = GalaxyOptions[pn] or {
+		Gauge = savedGauge,
+		SpeedMode = savedMode,
+		SpeedValue = savedValue,
+	}
 	-- Ensure speed fields exist for tables created before this version
-	if not GalaxyOptions[pn].SpeedMode then GalaxyOptions[pn].SpeedMode = "XMod" end
-	if not GalaxyOptions[pn].SpeedValue then GalaxyOptions[pn].SpeedValue = 2.0 end
+	if not GalaxyOptions[pn].SpeedMode then GalaxyOptions[pn].SpeedMode = savedMode end
+	if not GalaxyOptions[pn].SpeedValue then GalaxyOptions[pn].SpeedValue = savedValue end
 end
+
+-- ===== SONG INFO PANEL STATE =====
+local InfoFrame = nil   -- reference set in InitCommand
+
+-- ===== SONG PREVIEW STATE =====
+local PreviewActor = nil
 
 -- Cursor persistence across screen transitions
 GalaxyCursorState = GalaxyCursorState or {}
@@ -164,12 +181,32 @@ local GaugeChoices = {
 	{ label = "Risky",      value = "Risky" },
 }
 
+-- Resolve saved default indices
+local function FindChoiceIdx(choices, field, savedVal, fallback)
+	for i, c in ipairs(choices) do
+		if c[field] == savedVal then return i end
+	end
+	return fallback
+end
+
+local defaultModeIdx  = FindChoiceIdx(SpeedModes, "value", savedMode, 4)
+local defaultGaugeIdx = FindChoiceIdx(GaugeChoices, "value", savedGauge, 1)
+local defaultSpeedChoices = (savedMode == "XMod") and XModValues or BPMValues
+local defaultSpeedIdx = 1
+do
+	local bestDist = 999999
+	for i, c in ipairs(defaultSpeedChoices) do
+		local d = math.abs(c.value - savedValue)
+		if d < bestDist then defaultSpeedIdx, bestDist = i, d end
+	end
+end
+
 OptionRows = {
-	{ name = "Mode",   choices = SpeedModes,    selected = 1 },   -- XMod default
-	{ name = "Speed",  choices = XModValues,    selected = 8 },   -- x2.00 default
-	{ name = "Turn",   choices = TurnChoices,   selected = 1 },
-	{ name = "Scroll", choices = ScrollChoices,  selected = 1 },
-	{ name = "Gauge",  choices = GaugeChoices,  selected = 1 },
+	{ name = "Mode",   choices = SpeedModes,         selected = defaultModeIdx },
+	{ name = "Speed",  choices = defaultSpeedChoices, selected = defaultSpeedIdx },
+	{ name = "Turn",   choices = TurnChoices,         selected = math.max(1, math.min(savedTurn, #TurnChoices)) },
+	{ name = "Scroll", choices = ScrollChoices,        selected = math.max(1, math.min(savedScroll, #ScrollChoices)) },
+	{ name = "Gauge",  choices = GaugeChoices,        selected = defaultGaugeIdx },
 }
 
 -- ===== SIDE MENU FUNCTIONS =====
@@ -347,9 +384,30 @@ local function OpenMenu(playerNum)
 end
 
 local function CloseMenu(apply)
-	if apply then ApplyMenuOptions() end
+	if apply then
+		ApplyMenuOptions()
+		-- Persist to ThemePrefs for next session
+		SetGalaxyPref("SpeedMode",  SpeedModes[OptionRows[1].selected].value)
+		SetGalaxyPref("SpeedValue", OptionRows[2].choices[OptionRows[2].selected].value)
+		SetGalaxyPref("Turn",       OptionRows[3].selected)
+		SetGalaxyPref("Scroll",     OptionRows[4].selected)
+		SetGalaxyPref("Gauge",      GaugeChoices[OptionRows[5].selected].value)
+		SaveGalaxyPrefs()
+	end
 	MenuOpen = false
 	if MenuFrame then MenuFrame:visible(false) end
+end
+
+-- ===== SONG PREVIEW =====
+local function PlaySongPreview()
+	if PreviewActor then
+		PreviewActor:stoptweening()
+		PreviewActor:queuecommand("StartPreview")
+	end
+end
+
+local function StopSongPreview()
+	SOUND:StopMusic()
 end
 
 local function SaveCursorState()
@@ -420,6 +478,7 @@ local function ConfirmDifficulty()
 	end
 	SaveCursorState()
 	Accepted = true
+	StopSongPreview()
 	CloseDiffPicker()
 	SOUND:PlayOnce(THEME:GetPathS("Common","Start"))
 	SCREENMAN:GetTopScreen():StartTransitioningScreen("SM_GoToNextScreen")
@@ -440,6 +499,16 @@ end
 
 local function IsSong(idx)
 	return type(FlatList[idx]) == "table"
+end
+
+-- ===== SONG INFO PANEL =====
+local function RefreshInfoPanel()
+	if not InfoFrame then return end
+	local song = nil
+	if IsSong(Cursor) then
+		song = FlatList[Cursor][1]
+	end
+	InfoFrame:playcommand("SetSong", { Song = song })
 end
 
 -- ===== DATA LAYER =====
@@ -689,6 +758,8 @@ local function MoveCursor(delta)
 
 	Refresh(items)
 	if GridFrame then GridFrame:y(VisualOffset) end
+	RefreshInfoPanel()
+	PlaySongPreview()
 end
 
 local function ToggleGroup()
@@ -708,6 +779,7 @@ local function ToggleGroup()
 	end
 	ResetAnim()
 	Refresh()
+	RefreshInfoPanel()
 end
 
 local function ConfirmSong()
@@ -731,6 +803,7 @@ local function ConfirmSong()
 		end
 		SaveCursorState()
 		Accepted = true
+		StopSongPreview()
 		SOUND:PlayOnce(THEME:GetPathS("Common","Start"))
 		SCREENMAN:GetTopScreen():StartTransitioningScreen("SM_GoToNextScreen")
 	else
@@ -1187,6 +1260,8 @@ local t = Def.ActorFrame{
 		ResetAnim()
 		SCREENMAN:GetTopScreen():AddInputCallback(InputHandler)
 		Refresh()
+		RefreshInfoPanel()
+		PlaySongPreview()
 
 		-- Per-frame animation: shift ActorFrame y along cubic curve
 		self:SetUpdateFunction(function(af, dt)
@@ -1205,6 +1280,7 @@ local t = Def.ActorFrame{
 	end,
 	OffCommand = function(self)
 		SaveCursorState()
+		StopSongPreview()
 		SCREENMAN:GetTopScreen():RemoveInputCallback(InputHandler)
 	end,
 }
@@ -1339,4 +1415,123 @@ for i = 1, MAX_DIFFS do
 end
 
 outer[#outer+1] = diffPicker
+
+-- ===== SONG INFO PANEL =====
+-- Displays song name, artist, and BPM breakdown to the left of the grid.
+local INFO_X = 80   -- left-aligned
+local INFO_Y = SCREEN_CENTER_Y - 40
+
+local infoPanel = Def.ActorFrame{
+	Name = "SongInfoPanel",
+	InitCommand = function(self)
+		InfoFrame = self
+	end,
+	SetSongCommand = function(self, params)
+		local song = params.Song
+		local title  = self:GetChild("InfoTitle")
+		local artist = self:GetChild("InfoArtist")
+		local bpmText= self:GetChild("InfoBPM")
+
+		if song then
+			title:settext(song:GetDisplayMainTitle()):visible(true)
+			artist:settext(song:GetDisplayArtist()):visible(true)
+
+			-- BPM breakdown: [Min - Mode - Max]
+			local bpms = song:GetDisplayBpms()
+			local minBPM = math.floor(bpms[1] + 0.5)
+			local maxBPM = math.floor(bpms[2] + 0.5)
+			local modeBPM = GetDominantBPM(song)
+			if modeBPM then
+				modeBPM = math.floor(modeBPM + 0.5)
+			else
+				modeBPM = maxBPM
+			end
+
+			if minBPM == maxBPM then
+				bpmText:settext(tostring(minBPM) .. " BPM"):visible(true)
+			elseif minBPM == modeBPM or maxBPM == modeBPM then
+				bpmText:settext(minBPM .. " - " .. maxBPM .. " BPM"):visible(true)
+			else
+				bpmText:settext(minBPM .. " - " .. modeBPM .. " - " .. maxBPM .. " BPM"):visible(true)
+			end
+		else
+			title:settext(""):visible(false)
+			artist:settext(""):visible(false)
+			bpmText:settext(""):visible(false)
+		end
+	end,
+
+	-- Song title
+	LoadFont("Common Normal") .. {
+		Name = "InfoTitle",
+		InitCommand = function(self)
+			self:xy(INFO_X, INFO_Y)
+				:zoom(0.7):halign(0):valign(1)
+				:maxwidth(280/0.7)
+				:diffuse(Color.White):shadowlength(1)
+				:visible(false)
+		end,
+	},
+	-- Artist
+	LoadFont("Common Normal") .. {
+		Name = "InfoArtist",
+		InitCommand = function(self)
+			self:xy(INFO_X, INFO_Y + 22)
+				:zoom(0.5):halign(0):valign(1)
+				:maxwidth(280/0.5)
+				:diffuse(color("#aaaaaa")):shadowlength(1)
+				:visible(false)
+		end,
+	},
+	-- BPM
+	LoadFont("Common Normal") .. {
+		Name = "InfoBPM",
+		InitCommand = function(self)
+			self:xy(INFO_X, INFO_Y + 46)
+				:zoom(0.5):halign(0):valign(1)
+				:maxwidth(280/0.5)
+				:diffuse(color("#66aaff")):shadowlength(1)
+				:visible(false)
+		end,
+	},
+}
+outer[#outer+1] = infoPanel
+
+-- ===== SONG PREVIEW ACTOR =====
+-- Invisible actor that handles debounced preview playback.
+-- Uses stoptweening + sleep + queuecommand to debounce rapid scrolling.
+local PREVIEW_DELAY = 0.3  -- seconds to wait before starting preview
+
+outer[#outer+1] = Def.Actor{
+	Name = "SongPreview",
+	InitCommand = function(self)
+		PreviewActor = self
+	end,
+	StartPreviewCommand = function(self)
+		SOUND:StopMusic()
+		self:stoptweening():sleep(PREVIEW_DELAY):queuecommand("DoPreview")
+	end,
+	DoPreviewCommand = function(self)
+		local song = GAMESTATE:GetCurrentSong()
+		if song then
+			local path = song:GetPreviewMusicPath()
+			if path and path ~= "" then
+				SOUND:PlayMusicPart(
+					path,
+					song:GetSampleStart(),
+					song:GetSampleLength(),
+					0,    -- fadeIn
+					1,    -- fadeOut
+					true, -- loop
+					false,-- applyRate
+					false -- alignBeat
+				)
+			end
+		end
+	end,
+	OffCommand = function(self)
+		SOUND:StopMusic()
+	end,
+}
+
 return outer

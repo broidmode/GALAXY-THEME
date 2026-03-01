@@ -1,29 +1,30 @@
 -- GALAXY Theme Preferences
--- Stores theme-level preferences that persist across sessions
+-- Stores theme-level preferences that persist across sessions via Save/ThemePrefs.ini
 
-local defaultPrefs = {
-	FlareGaugeLevel = 0,      -- 0 = off, 1-10 = flare skill levels
-	ScoringMode     = "DDR",  -- "DDR" or "OutFox"
-	TimingMode      = "DDR",  -- "DDR" or "OutFox"
+local Prefs = {
+	-- Scoring / timing
+	FlareGaugeLevel = { Default = 0 },         -- 0 = off, 1-10 = flare skill levels
+	ScoringMode     = { Default = "DDR" },      -- "DDR" or "OutFox"
+	TimingMode      = { Default = "DDR" },      -- "DDR" or "OutFox"
+	-- Side menu options (per-machine, not per-player)
+	SpeedMode       = { Default = "Real" },     -- XMod / CMod / MMod / Real
+	SpeedValue      = { Default = 500 },        -- multiplier (XMod) or BPM target
+	Turn            = { Default = 1 },          -- index into TurnChoices
+	Scroll          = { Default = 1 },          -- index into ScrollChoices
+	Gauge           = { Default = "Normal" },   -- gauge type string
 }
 
--- Initialize theme preferences on load
-function InitGalaxyPrefs()
-	for k, v in pairs(defaultPrefs) do
-		if GetThemePref(k) == nil then
-			SetThemePref(k, v)
-		end
-	end
-end
+ThemePrefs.Init(Prefs, true)
 
+-- Convenience wrappers
 function GetGalaxyPref(key)
-	local val = GetThemePref(key)
-	if val == nil then
-		return defaultPrefs[key]
-	end
-	return val
+	return ThemePrefs.Get(key)
 end
 
 function SetGalaxyPref(key, value)
-	SetThemePref(key, value)
+	ThemePrefs.Set(key, value)
+end
+
+function SaveGalaxyPrefs()
+	ThemePrefs.Save()
 end
