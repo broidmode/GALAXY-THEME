@@ -1213,6 +1213,54 @@ local function MakeMenu(pn)
 					value:diffuse(i == MenuRow[pn] and Color.White or color("#aaaaaa"))
 				end
 			end
+
+			-- Update speed BPM preview below the Speed row
+			local preview = self:GetChild("SpeedPreview")
+			if preview and rows[1] and rows[2] then
+				local song = GAMESTATE:GetCurrentSong()
+				if not song then
+					preview:settext("")
+				else
+					local mode = SpeedModes[rows[1].selected].value
+					local val  = rows[2].choices[rows[2].selected].value
+					local bpms = song:GetDisplayBpms()
+					local minB = math.floor(bpms[1] + 0.5)
+					local maxB = math.floor(bpms[2] + 0.5)
+					local domB = GetDominantBPM(song)
+					if not domB or domB <= 0 then domB = maxB end
+					domB = math.floor(domB + 0.5)
+
+					local eMin, eMode, eMax
+					if mode == "XMod" then
+						eMin  = math.floor(minB * val + 0.5)
+						eMode = math.floor(domB * val + 0.5)
+						eMax  = math.floor(maxB * val + 0.5)
+					elseif mode == "CMod" then
+						eMin = val; eMode = val; eMax = val
+					elseif mode == "MMod" then
+						-- MMod caps at the target; effective = min(bpm*mult, target)
+						-- The engine picks mult so maxBPM*mult = target
+						local mult = val / maxB
+						eMin  = math.floor(math.min(minB * mult, val) + 0.5)
+						eMode = math.floor(math.min(domB * mult, val) + 0.5)
+						eMax  = val
+					elseif mode == "Real" then
+						-- Real Speed: pick XMod so dominant*mult < target
+						local mult = math.floor(val / domB / 0.05) * 0.05
+						if domB * mult >= val then mult = mult - 0.05 end
+						mult = math.max(0.25, mult)
+						eMin  = math.floor(minB * mult + 0.5)
+						eMode = math.floor(domB * mult + 0.5)
+						eMax  = math.floor(maxB * mult + 0.5)
+					end
+
+					if eMin == eMax then
+						preview:settext(eMin .. " BPM")
+					else
+						preview:settext(eMin .. " / " .. eMode .. " / " .. eMax)
+					end
+				end
+			end
 		end,
 
 		-- Border
@@ -1291,6 +1339,20 @@ local function MakeMenu(pn)
 			end,
 		}
 	end
+
+	-- Speed BPM preview (displayed below the Speed row)
+	local speedRowY = topY + MENU_PAD + 36 + (2 - 1) * MENU_ROW_H + MENU_ROW_H/2
+	m[#m+1] = LoadFont("Common Normal") .. {
+		Name = "SpeedPreview",
+		InitCommand = function(self)
+			self:xy(menuX + MENU_W/2 - MENU_PAD - 8, speedRowY + 13)
+				:zoom(0.38)
+				:halign(1)
+				:settext("")
+				:diffuse(color("#66aaff"))
+				:shadowlength(1)
+		end,
+	}
 
 	-- Arrow indicators
 	m[#m+1] = LoadFont("Common Normal") .. {
@@ -1593,10 +1655,8 @@ local infoPanel = Def.ActorFrame{
 
 			if minBPM == maxBPM then
 				bpmText:settext(tostring(minBPM) .. " BPM"):visible(true)
-			elseif minBPM == modeBPM or maxBPM == modeBPM then
-				bpmText:settext(minBPM .. " - " .. maxBPM .. " BPM"):visible(true)
 			else
-				bpmText:settext(minBPM .. " - " .. modeBPM .. " - " .. maxBPM .. " BPM"):visible(true)
+				bpmText:settext(minBPM .. " / " .. modeBPM .. " / " .. maxBPM .. " BPM"):visible(true)
 			end
 		else
 			title:settext(""):visible(false)
