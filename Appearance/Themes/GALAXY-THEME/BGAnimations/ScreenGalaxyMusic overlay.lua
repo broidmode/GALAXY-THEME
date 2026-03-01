@@ -46,7 +46,8 @@ local AnimA, AnimB, AnimC, AnimD = 0, 0, 0, 0
 
 -- ===== SIDE MENU CONSTANTS =====
 local MENU_W       = 380
-local MENU_X       = SCREEN_WIDTH - MENU_W/2 - 30
+local MENU_X       = SCREEN_WIDTH - MENU_W/2 - 30  -- build-time reference (right side)
+local MENU_X_LEFT  = MENU_W/2 + 30                 -- left side for P1
 local MENU_ROW_H   = 50
 local MENU_PAD     = 16
 
@@ -55,11 +56,31 @@ local MenuOpen     = false
 local MenuRow      = 1
 local MenuFrame    = nil
 
+-- ===== DIFFICULTY PICKER STATE =====
+local DiffPickOpen = false
+local DiffPickIdx  = 1       -- selected index in DiffSteps[]
+local DiffSteps    = {}      -- array of Steps objects for chosen song
+local DiffFrame    = nil     -- reference to DiffPicker ActorFrame
+local DiffSong     = nil     -- the Song being difficulty-picked
+
+-- DDR-A3 difficulty colors
+local DiffColors = {
+	Difficulty_Beginner  = color("#1ed6ff"),
+	Difficulty_Easy      = color("#ffaa19"),
+	Difficulty_Medium    = color("#ff1e3c"),
+	Difficulty_Hard      = color("#32eb19"),
+	Difficulty_Challenge = color("#eb1eff"),
+	Difficulty_Edit      = color("#afafaf"),
+}
+
 -- Global options table — read by 04 GaugeState.lua and gameplay decorations
 GalaxyOptions = GalaxyOptions or {}
 for _, pn in ipairs({PLAYER_1, PLAYER_2}) do
 	GalaxyOptions[pn] = GalaxyOptions[pn] or { Gauge = "Normal" }
 end
+
+-- Cursor persistence across screen transitions
+GalaxyCursorState = GalaxyCursorState or {}
 
 -- ===== SIDE MENU OPTION DEFINITIONS =====
 local SpeedChoices = {}
@@ -126,6 +147,18 @@ local function ReadCurrentSpeed()
 	end
 end
 
+local function ReadCurrentGauge()
+	local pn = GAMESTATE:GetMasterPlayerNumber()
+	local current = GalaxyOptions[pn] and GalaxyOptions[pn].Gauge or "Normal"
+	for i, c in ipairs(GaugeChoices) do
+		if c.value == current then
+			OptionRows[4].selected = i
+			return
+		end
+	end
+	OptionRows[4].selected = 1
+end
+
 local function ApplyMenuOptions()
 	for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
 		-- Speed
@@ -157,11 +190,15 @@ local function RefreshMenu()
 	MenuFrame:playcommand("Refresh")
 end
 
-local function OpenMenu()
+local function OpenMenu(playerNum)
 	ReadCurrentSpeed()
+	ReadCurrentGauge()
 	MenuOpen = true
 	MenuRow = 1
 	if MenuFrame then
+		-- Position based on which player opened the menu
+		local isP1 = (playerNum == PLAYER_1)
+		MenuFrame:x(isP1 and (MENU_X_LEFT - MENU_X) or 0)
 		MenuFrame:visible(true)
 		RefreshMenu()
 	end
@@ -171,6 +208,77 @@ local function CloseMenu(apply)
 	if apply then ApplyMenuOptions() end
 	MenuOpen = false
 	if MenuFrame then MenuFrame:visible(false) end
+end
+
+local function SaveCursorState()
+	GalaxyCursorState.OpenGroup = OpenGroup
+	local item = FlatList[Cursor]
+	if type(item) == "table" then
+		GalaxyCursorState.SongDir = item[1]:GetSongDir()
+		GalaxyCursorState.GroupName = nil
+	elseif type(item) == "string" then
+		GalaxyCursorState.GroupName = item
+		GalaxyCursorState.SongDir = nil
+	end
+end
+
+-- ===== DIFFICULTY PICKER FUNCTIONS =====
+local function GetDiffColor(steps)
+	local d = steps:GetDifficulty()
+	return DiffColors[d] or color("#aaaaaa")
+end
+
+local function GetDiffLabel(steps)
+	local d = steps:GetDifficulty()
+	local short = ToEnumShortString(d)
+	return short .. " " .. tostring(steps:GetMeter())
+end
+
+local function RefreshDiffPicker()
+	if not DiffFrame then return end
+	DiffFrame:playcommand("RefreshDiff")
+end
+
+local function OpenDiffPicker(song, stepsArray)
+	DiffSong = song
+	DiffSteps = stepsArray
+	DiffPickIdx = 1
+	-- Try to default to preferred difficulty or middle entry
+	local pn = GAMESTATE:GetMasterPlayerNumber()
+	local pref = GAMESTATE:GetPreferredDifficulty(pn)
+	if pref then
+		for i, st in ipairs(DiffSteps) do
+			if st:GetDifficulty() == pref then
+				DiffPickIdx = i
+				break
+			end
+		end
+	end
+	DiffPickOpen = true
+	if DiffFrame then DiffFrame:visible(true) end
+	RefreshDiffPicker()
+end
+
+local function CloseDiffPicker()
+	DiffPickOpen = false
+	if DiffFrame then DiffFrame:visible(false) end
+end
+
+local function ConfirmDifficulty()
+	if Accepted then return end
+	local steps = DiffSteps[DiffPickIdx]
+	if not steps then return end
+	GAMESTATE:SetCurrentSong(DiffSong)
+	GAMESTATE:SetCurrentPlayMode("PlayMode_Regular")
+	for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
+		GAMESTATE:SetCurrentSteps(pn, steps)
+		GAMESTATE:SetPreferredDifficulty(pn, steps:GetDifficulty())
+	end
+	SaveCursorState()
+	Accepted = true
+	CloseDiffPicker()
+	SOUND:PlayOnce(THEME:GetPathS("Common","Start"))
+	SCREENMAN:GetTopScreen():StartTransitioningScreen("SM_GoToNextScreen")
 end
 
 -- ===== HELPERS =====
@@ -461,14 +569,29 @@ end
 local function ConfirmSong()
 	if Accepted or not IsSong(Cursor) then return end
 	local entry = FlatList[Cursor]
-	GAMESTATE:SetCurrentSong(entry[1])
-	GAMESTATE:SetCurrentPlayMode("PlayMode_Regular")
-	for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
-		GAMESTATE:SetCurrentSteps(pn, entry[2])
+	local song = entry[1]
+	-- Gather all available Steps for this song
+	local stepsArray = {}
+	for i = 2, #entry do
+		stepsArray[#stepsArray+1] = entry[i]
 	end
-	Accepted = true
-	SOUND:PlayOnce(THEME:GetPathS("Common","Start"))
-	SCREENMAN:GetTopScreen():StartTransitioningScreen("SM_GoToNextScreen")
+	if #stepsArray == 0 then return end
+	if #stepsArray == 1 then
+		-- Only one difficulty: skip picker, go straight
+		GAMESTATE:SetCurrentSong(song)
+		GAMESTATE:SetCurrentPlayMode("PlayMode_Regular")
+		for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
+			GAMESTATE:SetCurrentSteps(pn, stepsArray[1])
+		end
+		SaveCursorState()
+		Accepted = true
+		SOUND:PlayOnce(THEME:GetPathS("Common","Start"))
+		SCREENMAN:GetTopScreen():StartTransitioningScreen("SM_GoToNextScreen")
+	else
+		-- Multiple difficulties: open picker
+		SOUND:PlayOnce(THEME:GetPathS("","_switch down"))
+		OpenDiffPicker(song, stepsArray)
+	end
 end
 
 -- Row navigation helpers for songs
@@ -500,10 +623,32 @@ local function InputHandler(event)
 
 	-- Select button toggles the side menu
 	if btn == "Select" then
+		if DiffPickOpen then return true end  -- block Select during diff pick
 		if not MenuOpen then
-			OpenMenu()
+			OpenMenu(event.PlayerNumber)
 		else
 			CloseMenu(true)
+		end
+		return true
+	end
+
+	-- When difficulty picker is open, route input there
+	if DiffPickOpen then
+		if btn == "MenuUp" or btn == "MenuLeft" then
+			DiffPickIdx = DiffPickIdx - 1
+			if DiffPickIdx < 1 then DiffPickIdx = #DiffSteps end
+			SOUND:PlayOnce(THEME:GetPathS("","_switch down"))
+			RefreshDiffPicker()
+		elseif btn == "MenuDown" or btn == "MenuRight" then
+			DiffPickIdx = DiffPickIdx + 1
+			if DiffPickIdx > #DiffSteps then DiffPickIdx = 1 end
+			SOUND:PlayOnce(THEME:GetPathS("","_switch down"))
+			RefreshDiffPicker()
+		elseif btn == "Start" then
+			ConfirmDifficulty()
+		elseif btn == "Back" then
+			CloseDiffPicker()
+			SOUND:PlayOnce(THEME:GetPathS("Common","Cancel"))
 		end
 		return true
 	end
@@ -853,9 +998,41 @@ local t = Def.ActorFrame{
 			HeaderPool[i] = self:GetChild("Header"..i)
 		end
 
+		-- Restore cursor state from previous visit
+		if GalaxyCursorState.OpenGroup then
+			OpenGroup = GalaxyCursorState.OpenGroup
+		end
+
 		FlatList = BuildFlatList()
-		Cursor = 1
-		OpenGroup = ""
+
+		-- Try to restore cursor position
+		local restored = false
+		if GalaxyCursorState.SongDir then
+			for i, item in ipairs(FlatList) do
+				if type(item) == "table" and item[1]:GetSongDir() == GalaxyCursorState.SongDir then
+					Cursor = i
+					restored = true
+					break
+				end
+			end
+		elseif GalaxyCursorState.GroupName then
+			for i, item in ipairs(FlatList) do
+				if type(item) == "string" and item == GalaxyCursorState.GroupName then
+					Cursor = i
+					restored = true
+					break
+				end
+			end
+		end
+		if not restored then
+			Cursor = 1
+		end
+
+		-- Set current song if restored to a song entry
+		if IsSong(Cursor) then
+			GAMESTATE:SetCurrentSong(FlatList[Cursor][1])
+		end
+
 		Accepted = false
 		ResetAnim()
 		SCREENMAN:GetTopScreen():AddInputCallback(InputHandler)
@@ -877,6 +1054,7 @@ local t = Def.ActorFrame{
 		end)
 	end,
 	OffCommand = function(self)
+		SaveCursorState()
 		SCREENMAN:GetTopScreen():RemoveInputCallback(InputHandler)
 	end,
 }
@@ -892,4 +1070,123 @@ end
 local outer = Def.ActorFrame{ Name = "MusicSelectRoot" }
 outer[#outer+1] = t
 outer[#outer+1] = MakeMenu()
+
+-- ===== DIFFICULTY PICKER ACTOR =====
+-- Centered overlay showing all available difficulties for the chosen song.
+-- Max 6 difficulties (Beginner/Easy/Medium/Hard/Challenge/Edit).
+local DIFF_ROW_H = 52
+local DIFF_W     = 350
+local MAX_DIFFS  = 6
+
+local diffPicker = Def.ActorFrame{
+	Name = "DiffPicker",
+	InitCommand = function(self)
+		DiffFrame = self
+		self:visible(false)
+	end,
+	RefreshDiffCommand = function(self)
+		local n = #DiffSteps
+		local totalH = n * DIFF_ROW_H + 60
+		local topY = SCREEN_CENTER_Y - totalH/2
+
+		-- Update background size
+		local bg = self:GetChild("DiffBG")
+		local border = self:GetChild("DiffBorder")
+		if bg then bg:y(SCREEN_CENTER_Y):zoomto(DIFF_W, totalH) end
+		if border then border:y(SCREEN_CENTER_Y):zoomto(DIFF_W + 2, totalH + 2) end
+
+		-- Update title
+		local title = self:GetChild("DiffTitle")
+		if title then
+			local songName = DiffSong and DiffSong:GetDisplayMainTitle() or ""
+			title:y(topY + 20):settext(songName)
+		end
+
+		-- Update rows
+		for i = 1, MAX_DIFFS do
+			local rowBG   = self:GetChild("DiffRowBG"..i)
+			local label   = self:GetChild("DiffLabel"..i)
+			local meter   = self:GetChild("DiffMeter"..i)
+			if i <= n then
+				local st = DiffSteps[i]
+				local dc = GetDiffColor(st)
+				local rowY = topY + 40 + (i - 1) * DIFF_ROW_H + DIFF_ROW_H/2
+				if rowBG then
+					rowBG:visible(true):y(rowY)
+					rowBG:diffuse(i == DiffPickIdx and color("#333366") or color("#00000000"))
+				end
+				if label then
+					label:visible(true):y(rowY)
+					local short = ToEnumShortString(st:GetDifficulty())
+					label:settext(short)
+					label:diffuse(i == DiffPickIdx and dc or color("#888888"))
+				end
+				if meter then
+					meter:visible(true):y(rowY)
+					meter:settext(tostring(st:GetMeter()))
+					meter:diffuse(i == DiffPickIdx and dc or color("#666666"))
+				end
+			else
+				if rowBG then rowBG:visible(false) end
+				if label then label:visible(false) end
+				if meter then meter:visible(false) end
+			end
+		end
+	end,
+
+	-- Border
+	Def.Quad{
+		Name = "DiffBorder",
+		InitCommand = function(self)
+			self:x(SCREEN_CENTER_X):zoomto(DIFF_W + 2, 200):diffuse(color("#444466"))
+		end,
+	},
+	-- Background
+	Def.Quad{
+		Name = "DiffBG",
+		InitCommand = function(self)
+			self:x(SCREEN_CENTER_X):zoomto(DIFF_W, 200)
+				:diffuse(color("#0a0a18")):diffusealpha(0.97)
+		end,
+	},
+	-- Song title
+	LoadFont("Common Normal") .. {
+		Name = "DiffTitle",
+		InitCommand = function(self)
+			self:x(SCREEN_CENTER_X):zoom(0.6)
+				:maxwidth(DIFF_W / 0.6 - 40)
+				:diffuse(Color.White):shadowlength(1)
+		end,
+	},
+}
+
+-- Difficulty rows
+for i = 1, MAX_DIFFS do
+	-- Row highlight
+	diffPicker[#diffPicker+1] = Def.Quad{
+		Name = "DiffRowBG"..i,
+		InitCommand = function(self)
+			self:x(SCREEN_CENTER_X):zoomto(DIFF_W - 8, DIFF_ROW_H - 6)
+				:visible(false)
+		end,
+	}
+	-- Difficulty name
+	diffPicker[#diffPicker+1] = LoadFont("Common Normal") .. {
+		Name = "DiffLabel"..i,
+		InitCommand = function(self)
+			self:x(SCREEN_CENTER_X - DIFF_W/2 + 20):zoom(0.65)
+				:halign(0):shadowlength(1):visible(false)
+		end,
+	}
+	-- Meter number
+	diffPicker[#diffPicker+1] = LoadFont("Common Normal") .. {
+		Name = "DiffMeter"..i,
+		InitCommand = function(self)
+			self:x(SCREEN_CENTER_X + DIFF_W/2 - 20):zoom(0.7)
+				:halign(1):shadowlength(1):visible(false)
+		end,
+	}
+end
+
+outer[#outer+1] = diffPicker
 return outer
