@@ -9,11 +9,21 @@ local SECTION = "GALAXY"
 
 -- Default values for new profiles / guests
 local Defaults = {
-	SpeedMode  = "Real",
-	SpeedValue = 200,
-	Turn       = 1,
-	Scroll     = 1,
-	Gauge      = "Normal",
+	SpeedMode      = "Real",
+	SpeedValue     = 200,
+	Turn           = 1,
+	Scroll         = 1,
+	Gauge          = "Normal",
+	NoteSkin       = "",       -- empty = engine default
+	Accel          = 1,        -- index: 1=Normal 2=Boost 3=Brake 4=Wave
+	LaneCover      = 1,        -- index: 1=Off 2=Hidden+ 3=Sudden+ 4=HidSud+
+	LaneVis        = 1,        -- index: 1=0% … 11=100% (0 = no darkening)
+	Guideline      = 1,        -- index: 1=Center 2=Border 3=Off
+	StepZone       = 1,        -- index: 1=On 2=Off
+	FastSlow       = 1,        -- index: 1=On 2=Off
+	ComboPriority  = 1,        -- index: 1=Low 2=High
+	JudgePriority  = 1,        -- index: 1=Low 2=High
+	JudgePosition  = 1,        -- index: 1=Near 2=Far
 }
 
 -- Ensure GalaxyOptions global exists
@@ -45,6 +55,16 @@ local function LoadGalaxySettings(pn, dir)
 	if sec.Turn       then opts.Turn       = tonumber(sec.Turn) or Defaults.Turn end
 	if sec.Scroll     then opts.Scroll     = tonumber(sec.Scroll) or Defaults.Scroll end
 	if sec.Gauge      then opts.Gauge      = tostring(sec.Gauge) end
+	if sec.NoteSkin       then opts.NoteSkin       = tostring(sec.NoteSkin) end
+	if sec.Accel          then opts.Accel          = tonumber(sec.Accel)          or Defaults.Accel end
+	if sec.LaneCover      then opts.LaneCover      = tonumber(sec.LaneCover)      or Defaults.LaneCover end
+	if sec.LaneVis        then opts.LaneVis        = tonumber(sec.LaneVis)        or Defaults.LaneVis end
+	if sec.Guideline      then opts.Guideline      = tonumber(sec.Guideline)      or Defaults.Guideline end
+	if sec.StepZone       then opts.StepZone       = tonumber(sec.StepZone)       or Defaults.StepZone end
+	if sec.FastSlow       then opts.FastSlow       = tonumber(sec.FastSlow)       or Defaults.FastSlow end
+	if sec.ComboPriority  then opts.ComboPriority  = tonumber(sec.ComboPriority)  or Defaults.ComboPriority end
+	if sec.JudgePriority  then opts.JudgePriority  = tonumber(sec.JudgePriority)  or Defaults.JudgePriority end
+	if sec.JudgePosition  then opts.JudgePosition  = tonumber(sec.JudgePosition)  or Defaults.JudgePosition end
 
 	Trace("[GALAXY] Loaded profile prefs for " .. tostring(pn) .. " from " .. path)
 end
@@ -57,11 +77,21 @@ local function SaveGalaxySettings(pn, dir)
 	local opts = GalaxyOptions[pn]
 	local tbl = {
 		[SECTION] = {
-			SpeedMode  = opts.SpeedMode  or Defaults.SpeedMode,
-			SpeedValue = opts.SpeedValue or Defaults.SpeedValue,
-			Turn       = opts.Turn       or Defaults.Turn,
-			Scroll     = opts.Scroll     or Defaults.Scroll,
-			Gauge      = opts.Gauge      or Defaults.Gauge,
+			SpeedMode      = opts.SpeedMode      or Defaults.SpeedMode,
+			SpeedValue     = opts.SpeedValue     or Defaults.SpeedValue,
+			Turn           = opts.Turn           or Defaults.Turn,
+			Scroll         = opts.Scroll         or Defaults.Scroll,
+			Gauge          = opts.Gauge          or Defaults.Gauge,
+			NoteSkin       = opts.NoteSkin       or Defaults.NoteSkin,
+			Accel          = opts.Accel          or Defaults.Accel,
+			LaneCover      = opts.LaneCover      or Defaults.LaneCover,
+			LaneVis        = opts.LaneVis        or Defaults.LaneVis,
+			Guideline      = opts.Guideline      or Defaults.Guideline,
+			StepZone       = opts.StepZone       or Defaults.StepZone,
+			FastSlow       = opts.FastSlow       or Defaults.FastSlow,
+			ComboPriority  = opts.ComboPriority  or Defaults.ComboPriority,
+			JudgePriority  = opts.JudgePriority  or Defaults.JudgePriority,
+			JudgePosition  = opts.JudgePosition  or Defaults.JudgePosition,
 		}
 	}
 

@@ -48,7 +48,7 @@ local AnimA, AnimB, AnimC, AnimD = 0, 0, 0, 0
 local MENU_W       = 380
 local MENU_X       = SCREEN_WIDTH - MENU_W/2 - 30  -- build-time reference (right side)
 local MENU_X_LEFT  = MENU_W/2 + 30                 -- left side for P1
-local MENU_ROW_H   = 50
+local MENU_ROW_H   = 36
 local MENU_PAD     = 16
 
 -- ===== SIDE MENU STATE =====
@@ -142,7 +142,59 @@ local GaugeChoices = {
 	{ label = "Risky",      value = "Risky" },
 }
 
-local NUM_OPTION_ROWS = 5
+local AccelChoices = {
+	{ label = "Normal", mod = "" },
+	{ label = "Boost",  mod = "Boost" },
+	{ label = "Brake",  mod = "Brake" },
+	{ label = "Wave",   mod = "Wave" },
+}
+
+local LaneCoverChoices = {
+	{ label = "Off",      value = "Off" },
+	{ label = "Hidden+",  value = "Hidden" },
+	{ label = "Sudden+",  value = "Sudden" },
+	{ label = "HidSud+",  value = "HidSud" },
+}
+
+local LaneVisChoices = {}
+do
+	for i = 0, 100, 10 do
+		LaneVisChoices[#LaneVisChoices+1] = { label = i.."%", value = i }
+	end
+end
+
+local GuidelineChoices = {
+	{ label = "Center", value = "Center" },
+	{ label = "Border", value = "Border" },
+	{ label = "Off",    value = "Off" },
+}
+
+local StepZoneChoices = {
+	{ label = "On",  value = "On" },
+	{ label = "Off", value = "Off" },
+}
+
+local FastSlowChoices = {
+	{ label = "On",  value = "On" },
+	{ label = "Off", value = "Off" },
+}
+
+local ComboPriorityChoices = {
+	{ label = "Low",  value = "Low" },
+	{ label = "High", value = "High" },
+}
+
+local JudgePriorityChoices = {
+	{ label = "Low",  value = "Low" },
+	{ label = "High", value = "High" },
+}
+
+local JudgePositionChoices = {
+	{ label = "Near", value = "Near" },
+	{ label = "Far",  value = "Far" },
+}
+
+local NUM_OPTION_ROWS = 15
 
 -- Helper: find index in a choices array where c[field] == val
 local function FindChoiceIdx(choices, field, val, fallback)
@@ -176,12 +228,45 @@ local function BuildOptionRowsForPlayer(pn)
 	local speedIdx = FindClosestIdx(speedChoices, speed)
 	local gaugeIdx = FindChoiceIdx(GaugeChoices, "value", gauge, 1)
 
+	-- NoteSkin: build choices dynamically from engine
+	local nsNames = NOTESKIN:GetNoteSkinNames()
+	local nsChoices = {}
+	for _, name in ipairs(nsNames) do
+		nsChoices[#nsChoices+1] = { label = name, value = name }
+	end
+	local currentNS = opts.NoteSkin or ""
+	if currentNS == "" then
+		local po = GAMESTATE:GetPlayerState(pn):GetPlayerOptions("ModsLevel_Preferred")
+		currentNS = po:NoteSkin() or ""
+	end
+	local nsIdx = FindChoiceIdx(nsChoices, "value", currentNS, 1)
+
+	local accel    = opts.Accel          or 1
+	local cover    = opts.LaneCover      or 1
+	local vis      = opts.LaneVis        or 1
+	local guide    = opts.Guideline      or 1
+	local stepzone = opts.StepZone       or 1
+	local fastslow = opts.FastSlow       or 1
+	local combop   = opts.ComboPriority  or 1
+	local judgep   = opts.JudgePriority  or 1
+	local judgepos = opts.JudgePosition  or 1
+
 	return {
-		{ name = "Mode",   choices = SpeedModes,    selected = modeIdx },
-		{ name = "Speed",  choices = speedChoices,   selected = speedIdx },
-		{ name = "Turn",   choices = TurnChoices,    selected = math.max(1, math.min(turn, #TurnChoices)) },
-		{ name = "Scroll", choices = ScrollChoices,  selected = math.max(1, math.min(scroll, #ScrollChoices)) },
-		{ name = "Gauge",  choices = GaugeChoices,   selected = gaugeIdx },
+		{ name = "Mode",      choices = SpeedModes,          selected = modeIdx },
+		{ name = "Speed",     choices = speedChoices,         selected = speedIdx },
+		{ name = "Turn",      choices = TurnChoices,          selected = math.max(1, math.min(turn, #TurnChoices)) },
+		{ name = "Scroll",    choices = ScrollChoices,        selected = math.max(1, math.min(scroll, #ScrollChoices)) },
+		{ name = "Gauge",     choices = GaugeChoices,         selected = gaugeIdx },
+		{ name = "NoteSkin",  choices = nsChoices,            selected = nsIdx },
+		{ name = "Accel",     choices = AccelChoices,         selected = math.max(1, math.min(accel, #AccelChoices)) },
+		{ name = "Cover",     choices = LaneCoverChoices,     selected = math.max(1, math.min(cover, #LaneCoverChoices)) },
+		{ name = "Lane Vis",  choices = LaneVisChoices,       selected = math.max(1, math.min(vis, #LaneVisChoices)) },
+		{ name = "Guideline", choices = GuidelineChoices,     selected = math.max(1, math.min(guide, #GuidelineChoices)) },
+		{ name = "StepZone",  choices = StepZoneChoices,      selected = math.max(1, math.min(stepzone, #StepZoneChoices)) },
+		{ name = "Fast/Slow", choices = FastSlowChoices,      selected = math.max(1, math.min(fastslow, #FastSlowChoices)) },
+		{ name = "Combo",     choices = ComboPriorityChoices, selected = math.max(1, math.min(combop, #ComboPriorityChoices)) },
+		{ name = "JudgePri",  choices = JudgePriorityChoices, selected = math.max(1, math.min(judgep, #JudgePriorityChoices)) },
+		{ name = "JudgePos",  choices = JudgePositionChoices, selected = math.max(1, math.min(judgepos, #JudgePositionChoices)) },
 	}
 end
 
@@ -305,7 +390,7 @@ local function ApplyMenuOptions(pn)
 	ApplySpeedMod(pn)
 
 	-- Turn: clear all, then apply
-	GAMESTATE:ApplyPreferredModifiers(pn, "NoMirror,NoLeft,NoRight,NoShuffle,NoSuperShuffle")
+	GAMESTATE:ApplyPreferredModifiers(pn, "no mirror,no left,no right,no shuffle,no supershuffle")
 	local turnMod = TurnChoices[rows[3].selected].mod
 	if turnMod ~= "" then
 		GAMESTATE:ApplyPreferredModifiers(pn, turnMod)
@@ -316,7 +401,7 @@ local function ApplyMenuOptions(pn)
 	if scrollMod == "Reverse" then
 		GAMESTATE:ApplyPreferredModifiers(pn, "Reverse")
 	else
-		GAMESTATE:ApplyPreferredModifiers(pn, "NoReverse")
+		GAMESTATE:ApplyPreferredModifiers(pn, "no reverse")
 	end
 
 	-- Gauge: store in global table for GaugeState to read
@@ -325,6 +410,53 @@ local function ApplyMenuOptions(pn)
 	-- Turn/Scroll indices stored in GalaxyOptions for profile save
 	GalaxyOptions[pn].Turn   = rows[3].selected
 	GalaxyOptions[pn].Scroll = rows[4].selected
+
+	-- NoteSkin (row 6)
+	local nsValue = rows[6].choices[rows[6].selected].value
+	local po = GAMESTATE:GetPlayerState(pn):GetPlayerOptions("ModsLevel_Preferred")
+	po:NoteSkin(nsValue)
+	GalaxyOptions[pn].NoteSkin = nsValue
+
+	-- Accel (row 7): clear all acceleration mods, then apply selected
+	GAMESTATE:ApplyPreferredModifiers(pn, "no boost,no brake,no wave")
+	local accelMod = AccelChoices[rows[7].selected].mod
+	if accelMod ~= "" then
+		GAMESTATE:ApplyPreferredModifiers(pn, accelMod)
+	end
+	GalaxyOptions[pn].Accel = rows[7].selected
+
+	-- Lane Cover (row 8): clear hidden/sudden, then apply selected
+	GAMESTATE:ApplyPreferredModifiers(pn, "no hidden,no sudden")
+	local coverVal = LaneCoverChoices[rows[8].selected].value
+	if coverVal == "Hidden" then
+		GAMESTATE:ApplyPreferredModifiers(pn, "hidden")
+	elseif coverVal == "Sudden" then
+		GAMESTATE:ApplyPreferredModifiers(pn, "sudden")
+	elseif coverVal == "HidSud" then
+		GAMESTATE:ApplyPreferredModifiers(pn, "hidden,sudden")
+	end
+	GalaxyOptions[pn].LaneCover = rows[8].selected
+
+	-- Lane Visibility (row 9): theme-level setting for gameplay overlay
+	GalaxyOptions[pn].LaneVis = rows[9].selected
+
+	-- Guideline (row 10): theme-level setting
+	GalaxyOptions[pn].Guideline = rows[10].selected
+
+	-- Step Zone (row 11): theme-level setting
+	GalaxyOptions[pn].StepZone = rows[11].selected
+
+	-- Fast/Slow (row 12): theme-level setting
+	GalaxyOptions[pn].FastSlow = rows[12].selected
+
+	-- Combo Priority (row 13): theme-level setting
+	GalaxyOptions[pn].ComboPriority = rows[13].selected
+
+	-- Judge Priority (row 14): theme-level setting
+	GalaxyOptions[pn].JudgePriority = rows[14].selected
+
+	-- Judge Position (row 15): theme-level setting
+	GalaxyOptions[pn].JudgePosition = rows[15].selected
 end
 
 local function RefreshMenu(pn)
@@ -1043,7 +1175,7 @@ local function MakeGroupHeader(name)
 end
 
 -- ===== SIDE MENU ACTOR =====
-local MENU_ROW_NAMES = {"Mode", "Speed", "Turn", "Scroll", "Gauge"}
+local MENU_ROW_NAMES = {"Mode", "Speed", "Turn", "Scroll", "Gauge", "NoteSkin", "Accel", "Cover", "Lane Vis", "Guideline", "StepZone", "Fast/Slow", "Combo", "JudgePri", "JudgePos"}
 local MENU_NUM_ROWS  = #MENU_ROW_NAMES
 
 local function MakeMenu(pn)
