@@ -44,6 +44,135 @@ local ANIM_DUR     = 0.15  -- animation duration in seconds
 -- Cubic coefficients: f(s) = As³ + Bs² + Cs + D, s ∈ [0,1]
 local AnimA, AnimB, AnimC, AnimD = 0, 0, 0, 0
 
+-- ===== SIDE MENU CONSTANTS =====
+local MENU_W       = 380
+local MENU_X       = SCREEN_WIDTH - MENU_W/2 - 30
+local MENU_ROW_H   = 50
+local MENU_PAD     = 16
+
+-- ===== SIDE MENU STATE =====
+local MenuOpen     = false
+local MenuRow      = 1
+local MenuFrame    = nil
+
+-- Global options table — read by 04 GaugeState.lua and gameplay decorations
+GalaxyOptions = GalaxyOptions or {}
+for _, pn in ipairs({PLAYER_1, PLAYER_2}) do
+	GalaxyOptions[pn] = GalaxyOptions[pn] or { Gauge = "Normal" }
+end
+
+-- ===== SIDE MENU OPTION DEFINITIONS =====
+local SpeedChoices = {}
+do
+	local speeds = {
+		0.25, 0.50, 0.75, 1.00, 1.25, 1.50, 1.75, 2.00,
+		2.25, 2.50, 2.75, 3.00, 3.50, 4.00, 4.50, 5.00,
+		5.50, 6.00, 7.00, 8.00,
+	}
+	for _, v in ipairs(speeds) do
+		SpeedChoices[#SpeedChoices+1] = { label = string.format("x%.2f", v), value = v }
+	end
+end
+
+local TurnChoices = {
+	{ label = "Off",     mod = "" },
+	{ label = "Mirror",  mod = "Mirror" },
+	{ label = "Left",    mod = "Left" },
+	{ label = "Right",   mod = "Right" },
+	{ label = "Shuffle", mod = "Shuffle" },
+}
+
+local ScrollChoices = {
+	{ label = "Normal",  mod = "" },
+	{ label = "Reverse", mod = "Reverse" },
+}
+
+local GaugeChoices = {
+	{ label = "Normal",     value = "Normal" },
+	{ label = "Flare I",    value = "Flare1" },
+	{ label = "Flare II",   value = "Flare2" },
+	{ label = "Flare III",  value = "Flare3" },
+	{ label = "Flare IV",   value = "Flare4" },
+	{ label = "Flare V",    value = "Flare5" },
+	{ label = "Flare VI",   value = "Flare6" },
+	{ label = "Flare VII",  value = "Flare7" },
+	{ label = "Flare VIII", value = "Flare8" },
+	{ label = "Flare IX",   value = "Flare9" },
+	{ label = "Flare EX",   value = "FlareEX" },
+	{ label = "Floating",   value = "FloatingFlare" },
+	{ label = "LIFE4",      value = "LIFE4" },
+	{ label = "Risky",      value = "Risky" },
+}
+
+local OptionRows = {
+	{ name = "Speed",  choices = SpeedChoices,  selected = 6 },   -- x1.50 default
+	{ name = "Turn",   choices = TurnChoices,   selected = 1 },
+	{ name = "Scroll", choices = ScrollChoices,  selected = 1 },
+	{ name = "Gauge",  choices = GaugeChoices,  selected = 1 },
+}
+
+-- ===== SIDE MENU FUNCTIONS =====
+local function ReadCurrentSpeed()
+	local pn = GAMESTATE:GetMasterPlayerNumber()
+	local po = GAMESTATE:GetPlayerState(pn):GetPlayerOptions('ModsLevel_Preferred')
+	local xmod = po:XMod()
+	if xmod and xmod > 0 then
+		local bestIdx, bestDist = 1, 999
+		for i, c in ipairs(SpeedChoices) do
+			local dist = math.abs(c.value - xmod)
+			if dist < bestDist then bestIdx, bestDist = i, dist end
+		end
+		OptionRows[1].selected = bestIdx
+	end
+end
+
+local function ApplyMenuOptions()
+	for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
+		-- Speed
+		local speed = SpeedChoices[OptionRows[1].selected].value
+		GAMESTATE:ApplyPreferredModifiers(pn, string.format("%.2fx", speed))
+
+		-- Turn: clear all, then apply
+		GAMESTATE:ApplyPreferredModifiers(pn, "NoMirror,NoLeft,NoRight,NoShuffle,NoSuperShuffle")
+		local turnMod = TurnChoices[OptionRows[2].selected].mod
+		if turnMod ~= "" then
+			GAMESTATE:ApplyPreferredModifiers(pn, turnMod)
+		end
+
+		-- Scroll
+		local scrollMod = ScrollChoices[OptionRows[3].selected].mod
+		if scrollMod == "Reverse" then
+			GAMESTATE:ApplyPreferredModifiers(pn, "Reverse")
+		else
+			GAMESTATE:ApplyPreferredModifiers(pn, "NoReverse")
+		end
+
+		-- Gauge: store in global table for GaugeState to read
+		GalaxyOptions[pn].Gauge = GaugeChoices[OptionRows[4].selected].value
+	end
+end
+
+local function RefreshMenu()
+	if not MenuFrame then return end
+	MenuFrame:playcommand("Refresh")
+end
+
+local function OpenMenu()
+	ReadCurrentSpeed()
+	MenuOpen = true
+	MenuRow = 1
+	if MenuFrame then
+		MenuFrame:visible(true)
+		RefreshMenu()
+	end
+end
+
+local function CloseMenu(apply)
+	if apply then ApplyMenuOptions() end
+	MenuOpen = false
+	if MenuFrame then MenuFrame:visible(false) end
+end
+
 -- ===== HELPERS =====
 
 -- Wrap an index into [1, #FlatList]
@@ -369,6 +498,48 @@ local function InputHandler(event)
 	if not btn then return false end
 	if not GAMESTATE:IsPlayerEnabled(event.PlayerNumber) then return false end
 
+	-- Select button toggles the side menu
+	if btn == "Select" then
+		if not MenuOpen then
+			OpenMenu()
+		else
+			CloseMenu(true)
+		end
+		return true
+	end
+
+	-- When menu is open, route all input to menu
+	if MenuOpen then
+		if btn == "MenuUp" then
+			MenuRow = MenuRow - 1
+			if MenuRow < 1 then MenuRow = #OptionRows end
+			SOUND:PlayOnce(THEME:GetPathS("","_switch down"))
+			RefreshMenu()
+		elseif btn == "MenuDown" then
+			MenuRow = MenuRow + 1
+			if MenuRow > #OptionRows then MenuRow = 1 end
+			SOUND:PlayOnce(THEME:GetPathS("","_switch down"))
+			RefreshMenu()
+		elseif btn == "MenuLeft" then
+			local row = OptionRows[MenuRow]
+			row.selected = row.selected - 1
+			if row.selected < 1 then row.selected = #row.choices end
+			SOUND:PlayOnce(THEME:GetPathS("","_switch down"))
+			RefreshMenu()
+		elseif btn == "MenuRight" then
+			local row = OptionRows[MenuRow]
+			row.selected = row.selected + 1
+			if row.selected > #row.choices then row.selected = 1 end
+			SOUND:PlayOnce(THEME:GetPathS("","_switch down"))
+			RefreshMenu()
+		elseif btn == "Start" then
+			CloseMenu(true)
+		elseif btn == "Back" then
+			CloseMenu(false)
+		end
+		return true  -- eat all input when menu is open
+	end
+
 	if btn == "MenuRight" then
 		MoveCursor(1)
 		return true
@@ -524,6 +695,152 @@ local function MakeGroupHeader(name)
 	}
 end
 
+-- ===== SIDE MENU ACTOR =====
+local function MakeMenu()
+	local numRows = #OptionRows
+	local totalH = MENU_PAD + 36 + numRows * MENU_ROW_H + MENU_PAD + 28 + MENU_PAD
+	local topY = SCREEN_CENTER_Y - totalH/2
+	local centerY = topY + totalH/2
+
+	local m = Def.ActorFrame{
+		Name = "SideMenu",
+		InitCommand = function(self)
+			MenuFrame = self
+			self:visible(false)
+		end,
+		RefreshCommand = function(self)
+			for i, row in ipairs(OptionRows) do
+				local rowBG = self:GetChild("RowBG"..i)
+				local label = self:GetChild("Label"..i)
+				local value = self:GetChild("Value"..i)
+				if rowBG then
+					rowBG:diffuse(i == MenuRow and color("#333366") or color("#00000000"))
+				end
+				if label then
+					label:diffuse(i == MenuRow and Color.White or color("#888888"))
+				end
+				if value then
+					local ch = row.choices[row.selected]
+					value:settext(ch and ch.label or "")
+					value:diffuse(i == MenuRow and Color.White or color("#aaaaaa"))
+				end
+			end
+		end,
+
+		-- Border
+		Def.Quad{
+			InitCommand = function(self)
+				self:xy(MENU_X, centerY)
+					:zoomto(MENU_W + 2, totalH + 2)
+					:diffuse(color("#444466"))
+			end,
+		},
+		-- Background
+		Def.Quad{
+			InitCommand = function(self)
+				self:xy(MENU_X, centerY)
+					:zoomto(MENU_W, totalH)
+					:diffuse(color("#0a0a18"))
+					:diffusealpha(0.95)
+			end,
+		},
+		-- Title
+		LoadFont("Common Normal") .. {
+			InitCommand = function(self)
+				self:xy(MENU_X, topY + MENU_PAD + 14)
+					:zoom(0.7)
+					:settext("OPTIONS")
+					:diffuse(Color.White)
+					:shadowlength(1)
+			end,
+		},
+		-- Divider line under title
+		Def.Quad{
+			InitCommand = function(self)
+				self:xy(MENU_X, topY + MENU_PAD + 32)
+					:zoomto(MENU_W - 24, 1)
+					:diffuse(color("#444466"))
+			end,
+		},
+	}
+
+	-- Option rows
+	for i, row in ipairs(OptionRows) do
+		local rowY = topY + MENU_PAD + 36 + (i - 1) * MENU_ROW_H + MENU_ROW_H/2
+
+		-- Row highlight
+		m[#m+1] = Def.Quad{
+			Name = "RowBG"..i,
+			InitCommand = function(self)
+				self:xy(MENU_X, rowY)
+					:zoomto(MENU_W - 8, MENU_ROW_H - 4)
+					:diffuse(color("#00000000"))
+			end,
+		}
+		-- Label
+		m[#m+1] = LoadFont("Common Normal") .. {
+			Name = "Label"..i,
+			InitCommand = function(self)
+				self:xy(MENU_X - MENU_W/2 + MENU_PAD + 8, rowY)
+					:zoom(0.6)
+					:halign(0)
+					:settext(row.name)
+					:diffuse(color("#888888"))
+					:shadowlength(1)
+			end,
+		}
+		-- Value with arrows
+		m[#m+1] = LoadFont("Common Normal") .. {
+			Name = "Value"..i,
+			InitCommand = function(self)
+				self:xy(MENU_X + MENU_W/2 - MENU_PAD - 8, rowY)
+					:zoom(0.55)
+					:halign(1)
+					:settext(row.choices[row.selected].label)
+					:maxwidth(220/0.55)
+					:diffuse(color("#aaaaaa"))
+					:shadowlength(1)
+			end,
+		}
+	end
+
+	-- Arrow indicators
+	m[#m+1] = LoadFont("Common Normal") .. {
+		Name = "ArrowL",
+		InitCommand = function(self)
+			self:xy(MENU_X + 40, 0):zoom(0.6):settext("<"):diffuse(color("#666688"))
+		end,
+		RefreshCommand = function(self)
+			local rowY = topY + MENU_PAD + 36 + (MenuRow - 1) * MENU_ROW_H + MENU_ROW_H/2
+			self:y(rowY)
+		end,
+	}
+	m[#m+1] = LoadFont("Common Normal") .. {
+		Name = "ArrowR",
+		InitCommand = function(self)
+			self:xy(MENU_X + MENU_W/2 - MENU_PAD + 4, 0):zoom(0.6):settext(">"):diffuse(color("#666688"))
+		end,
+		RefreshCommand = function(self)
+			local rowY = topY + MENU_PAD + 36 + (MenuRow - 1) * MENU_ROW_H + MENU_ROW_H/2
+			self:y(rowY)
+		end,
+	}
+
+	-- Footer hint
+	m[#m+1] = LoadFont("Common Normal") .. {
+		InitCommand = function(self)
+			local footY = topY + MENU_PAD + 36 + numRows * MENU_ROW_H + MENU_PAD + 8
+			self:xy(MENU_X, footY)
+				:zoom(0.38)
+				:settext("Select/Start: Confirm   Back: Cancel")
+				:diffuse(color("#555566"))
+				:shadowlength(1)
+		end,
+	}
+
+	return m
+end
+
 -- ===== BUILD ACTOR TREE =====
 local t = Def.ActorFrame{
 	Name = "GridBrowser",
@@ -571,4 +888,8 @@ for i = 1, POOL_HEADERS do
 	t[#t+1] = MakeGroupHeader("Header"..i)
 end
 
-return t
+-- Wrap in outer frame so menu is not affected by grid scroll animation
+local outer = Def.ActorFrame{ Name = "MusicSelectRoot" }
+outer[#outer+1] = t
+outer[#outer+1] = MakeMenu()
+return outer
