@@ -8,16 +8,18 @@ function GetLocalProfiles()
 	local t = {}
 	-- Guest entry (always first — scroller item 0)
 	t[#t+1] = Def.ActorFrame{
-		Def.Text{ Font = RodinPath("db"), Size = FONT_L, Text = "Guest",
+		Def.Text{ Font = RodinPath("db"), Size = FontL("db"), Text = "Guest",
 			InitCommand = function(self)
 				self:y(-6):zoom(FONT_ZOOM):diffuse(color("#66aaff")):ztest(true)
 				self:shadowlength(0)
+				self:SetTextureFiltering(false)
 			end,
 		},
-		Def.Text{ Font = RodinPath("m"), Size = FONT_M, Text = "Play without saving",
+		Def.Text{ Font = RodinPath("db"), Size = FontM("db"), Text = "Play without saving",
 			InitCommand = function(self)
 				self:y(14):zoom(FONT_ZOOM):diffuse(color("#888888")):ztest(true)
 				self:shadowlength(0)
+				self:SetTextureFiltering(false)
 			end,
 		},
 	}
@@ -30,16 +32,18 @@ function GetLocalProfiles()
 			or  numSongs.." songs played"
 
 		t[#t+1] = Def.ActorFrame{
-			Def.Text{ Font = RodinPath("db"), Size = FONT_L, Text = profile:GetDisplayName(),
-				InitCommand = function(self)
-					self:y(-6):zoom(FONT_ZOOM):diffuse(Color.White):ztest(true)
-					self:shadowlength(0)
+		Def.Text{ Font = RodinPath("db"), Size = FontL("db"), Text = profile:GetDisplayName(),
+			InitCommand = function(self)
+				self:y(-6):zoom(FONT_ZOOM):diffuse(Color.White):ztest(true)
+				self:shadowlength(0)
+				self:SetTextureFiltering(false)
 				end,
 			},
-			Def.Text{ Font = RodinPath("m"), Size = FONT_M, Text = songStr,
-				InitCommand = function(self)
-					self:y(14):zoom(FONT_ZOOM):diffuse(color("#888888")):ztest(true)
-					self:shadowlength(0)
+		Def.Text{ Font = RodinPath("db"), Size = FontM("db"), Text = songStr,
+			InitCommand = function(self)
+				self:y(14):zoom(FONT_ZOOM):diffuse(color("#888888")):ztest(true)
+				self:shadowlength(0)
+				self:SetTextureFiltering(false)
 				end,
 			},
 		}
@@ -53,10 +57,11 @@ function LoadPlayerStuff(Player)
 	-- "Press START to join" frame (shown when player not joined)
 	t[#t+1] = Def.ActorFrame{
 		Name = "JoinFrame",
-		Def.Text{ Font = RodinPath("m"), Size = FONT_L, Text = "Press START to join",
+		Def.Text{ Font = RodinPath("db"), Size = FontL("db"), Text = "Press START to join",
 			InitCommand = function(self)
 				self:zoom(FONT_ZOOM):diffuse(color("#888888"))
 				self:shadowlength(0)
+				self:SetTextureFiltering(false)
 			end,
 			OnCommand = function(self)
 				self:diffuseshift():effectcolor1(color("#888888")):effectcolor2(color("#444444"))
@@ -80,11 +85,12 @@ function LoadPlayerStuff(Player)
 	}
 
 	-- Selected profile name shown below
-	t[#t+1] = Def.Text{ Font = RodinPath("m"), Size = FONT_M, Text = "",
+	t[#t+1] = Def.Text{ Font = RodinPath("db"), Size = FontM("db"), Text = "",
 		Name = "SelectedProfileText",
 		InitCommand = function(self)
 			self:y(130):zoom(FONT_ZOOM):diffuse(color("#888888"))
 			self:shadowlength(0)
+			self:SetTextureFiltering(false)
 		end,
 	}
 

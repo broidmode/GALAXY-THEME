@@ -1,39 +1,74 @@
--- GALAXY helper functions for music selection
+-- GALAXY helper functions
+-- See !Docs/outline.md § Font Strategy for architecture overview.
+-- See !Docs/pixel-perfect-text-research.md for engine-level details.
 
--- ===== FONT SIZE TIERS (DPI-aware) =====
--- Base sizes are designed for 1080p (the theme's virtual ScreenHeight).
--- At higher display resolutions the engine upscales everything via its
--- projection matrix, which would magnify the glyph textures and make text
--- slightly soft.  We counter this by rasterizing at the real display DPI
--- and applying a uniform FONT_ZOOM so text stays the same virtual size.
+-- ===== PER-WEIGHT FONT SIZE TABLE =====
+-- Base sizes are in *virtual* pixels, designed for the theme's 1080p
+-- ScreenHeight.  At runtime each value is multiplied by
+--     _scale = displayHeight / 1080
+-- so the FreeType rasterizer generates glyph textures that map 1:1 to
+-- real display pixels.  FONT_ZOOM (= 1/_scale) is then applied to every
+-- Def.Text to shrink the quad back to its intended on-screen proportion.
 --
---   1080p → scale 1.0   FONT_ZOOM 1.0   (pixel-perfect, no zoom)
---   1440p → scale 1.333  FONT_ZOOM 0.75  (27 px raster → 27 display px)
---   2160p → scale 2.0   FONT_ZOOM 0.5   (40 px raster → 40 display px)
+-- Result: crisp text at any resolution, with no magnification blur.
+--
+-- >>> EDIT THE TABLE BELOW to tweak font sizes per weight. <<<
+--
+-- Currently every screen uses rodin_db (DemiBold) uniformly.
+-- When we add custom fonts for different UI sections, each weight can
+-- have independent S/M/L values — heavier strokes read larger at the
+-- same pixel size, so you can dial Bold down a couple of virtual px.
+--
+-- Weight key reference (Rodin family):
+--   l  = Light     m  = Medium    db = DemiBold
+--   b  = Bold      eb = ExtraBold ub = UltraBold
+--
+-- Tier usage:
+--   S (14 vp) — data labels, score panel cells, hints, footer text
+--   M (20 vp) — card titles, menu items, section headings
+--   L (30 vp) — main score, profile names, screen headings
+
+local _FontBase = {
+--              S    M    L          -- tier usage
+	l  = { S = 14, M = 20, L = 30 },  -- Light
+	m  = { S = 14, M = 20, L = 30 },  -- Medium
+	db = { S = 14, M = 20, L = 30 },  -- DemiBold
+	b  = { S = 14, M = 20, L = 30 },  -- Bold
+	eb = { S = 14, M = 20, L = 30 },  -- ExtraBold
+	ub = { S = 14, M = 20, L = 30 },  -- UltraBold
+}
 
 local _displayH = PREFSMAN:GetPreference("DisplayHeight") or 1080
-local _dpiScale = _displayH / SCREEN_HEIGHT   -- display px per virtual px
+local _scale    = _displayH / SCREEN_HEIGHT   -- display px per virtual px
 
-FONT_S = math.floor(14 * _dpiScale + 0.5)  -- Small:  data labels, score panel, hints
-FONT_M = math.floor(20 * _dpiScale + 0.5)  -- Medium: UI text, menu items, card titles
-FONT_L = math.floor(30 * _dpiScale + 0.5)  -- Large:  headings, main score, profile names
+FONT_ZOOM = 1 / _scale   -- apply to every Def.Text to keep virtual-coord layout
 
-FONT_ZOOM = 1 / _dpiScale   -- apply to every Def.Text to keep virtual-coord layout
+-- ---------------------------------------------------------------------------
+-- Scaled size getters
+-- Usage:   Font = RodinPath("db"), Size = FontM("db")
+-- The weight arg ("db") selects the row from _FontBase; if we later
+-- add a second font family, the same size table still applies.
+-- ---------------------------------------------------------------------------
+function FontS(w)  return math.floor(_FontBase[w].S * _scale + 0.5) end
+function FontM(w)  return math.floor(_FontBase[w].M * _scale + 0.5) end
+function FontL(w)  return math.floor(_FontBase[w].L * _scale + 0.5) end
 
--- Exact DPI-scaled font size for a given virtual-pixel height.
--- Use this when a preset tier (S/M/L) doesn't match the intended size.
--- Each unique return value creates its own glyph atlas, so prefer the
--- tier constants for common sizes and reserve this for fine-tuning.
-function FontSize(virtualPx)
-	return math.floor(virtualPx * _dpiScale + 0.5)
-end
-
--- Convenience: maxwidth in virtual pixels, auto-adjusted for DPI rasterization
+-- ---------------------------------------------------------------------------
+-- Convenience: maxwidth in virtual pixels, auto-adjusted for DPI rasterization.
+-- Because the glyph atlas is rasterized at _scale× native, and the quad is
+-- zoomed by 1/_scale, the maxwidth the engine sees must compensate.
+-- ---------------------------------------------------------------------------
 function FontMaxWidth(virtualPx)
 	return virtualPx / FONT_ZOOM
 end
 
 -- ===== RODIN FONT PATHS =====
+-- Resolves and caches the on-disk path for a given Rodin weight.
+--
+-- Currently the entire theme uses "db" (DemiBold) uniformly.
+-- When custom per-section fonts are introduced, call RodinPath with the
+-- appropriate weight key.
+--
 -- Weight keys: "l" (Light), "m" (Medium), "db" (DemiBold),
 --              "b" (Bold), "eb" (ExtraBold), "ub" (UltraBold)
 local _RodinPaths = {}

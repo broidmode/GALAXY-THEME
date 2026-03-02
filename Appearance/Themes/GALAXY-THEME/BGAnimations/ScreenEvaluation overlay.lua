@@ -73,6 +73,7 @@ local function T(p)
 	return Def.Text{
 		Font = RodinPath("db"),
 		Size = p.size or FontS("db"),
+		Text = "",
 		InitCommand = function(self)
 			self:xy(p.x or 0, p.y or 0)
 				:zoom(FONT_ZOOM)
