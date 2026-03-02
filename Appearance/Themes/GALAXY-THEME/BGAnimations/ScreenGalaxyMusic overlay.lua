@@ -83,6 +83,9 @@ local DiffColors = {
 -- ===== SONG INFO PANEL STATE =====
 local InfoFrame = nil   -- reference set in InitCommand
 
+-- ===== SCORE PANEL STATE =====
+local ScorePanelFrame = {}  -- ScorePanelFrame[pn] = ActorFrame reference
+
 -- ===== SONG PREVIEW STATE =====
 local PreviewActor = nil
 
@@ -534,6 +537,17 @@ local function RefreshDiffPicker()
 	for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
 		if DiffFrame[pn] then DiffFrame[pn]:playcommand("RefreshDiff") end
 	end
+	-- Also update score panel highlight to follow diff picker cursor
+	for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
+		if ScorePanelFrame[pn] and DiffSteps and DiffPickIdx[pn] then
+			local steps = DiffSteps[DiffPickIdx[pn]]
+			if steps then
+				ScorePanelFrame[pn]:playcommand("HighlightDiffByEnum", {
+					Difficulty = steps:GetDifficulty()
+				})
+			end
+		end
+	end
 end
 
 local function OpenDiffPicker(song, stepsArray)
@@ -612,6 +626,12 @@ local function RefreshInfoPanel()
 		song = FlatList[Cursor][1]
 	end
 	InfoFrame:playcommand("SetSong", { Song = song })
+	-- Also refresh score panels
+	for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
+		if ScorePanelFrame[pn] then
+			ScorePanelFrame[pn]:playcommand("SetSong", { Song = song })
+		end
+	end
 end
 
 -- ===== DATA LAYER =====
@@ -1737,5 +1757,370 @@ outer[#outer+1] = Def.Actor{
 		SOUND:StopMusic()
 	end,
 }
+
+-- ===== SCORE PANEL =====
+-- Per-player panel showing scores for all 5 difficulties of the selected song.
+-- P1 left, P2 right. Rows grayed out if difficulty doesn't exist.
+-- Columns: Diff | Meter | Grade | Score | Lamp | EX Raw | EX% | Flare | FP
+
+local PANEL_W     = 355
+local PANEL_H     = 200
+local PANEL_ROW_H = 30
+local PANEL_Y     = SCREEN_CENTER_Y + 230
+local PANEL_DIFFS = {
+	"Difficulty_Beginner",
+	"Difficulty_Easy",
+	"Difficulty_Medium",
+	"Difficulty_Hard",
+	"Difficulty_Challenge",
+}
+local PANEL_DIFF_LABELS = { "BEG", "BSC", "DIF", "EXP", "CHA" }
+
+local PANEL_DIFF_COLORS = {
+	Difficulty_Beginner  = color("#1ed6ff"),
+	Difficulty_Easy      = color("#ffaa19"),
+	Difficulty_Medium    = color("#ff1e3c"),
+	Difficulty_Hard      = color("#32eb19"),
+	Difficulty_Challenge = color("#eb1eff"),
+}
+
+local function commify(n)
+	local s = tostring(n)
+	local pos = #s % 3
+	if pos == 0 then pos = 3 end
+	local parts = { s:sub(1, pos) }
+	for i = pos + 1, #s, 3 do
+		parts[#parts+1] = s:sub(i, i + 2)
+	end
+	return table.concat(parts, ",")
+end
+
+-- Lamp display colors
+local LampColors = {
+	MFC   = color("#00ccff"),  -- cyan
+	PFC   = color("#ffcc00"),  -- gold
+	GFC   = color("#00ff66"),  -- green
+	FC    = color("#ffffff"),  -- white
+	LIFE4 = color("#ff66cc"),  -- pink
+	Clear = color("#888888"),  -- gray
+}
+
+local function MakeScorePanel(pn)
+	local isVersus = GAMESTATE:GetNumPlayersEnabled() > 1
+	local panelX
+	if isVersus then
+		panelX = (pn == PLAYER_1) and 190 or (SCREEN_WIDTH - 190)
+	else
+		panelX = 190
+	end
+
+	local pnShort = ToEnumShortString(pn)
+	local curHighlightIdx = 0  -- which row is highlighted (1-5, 0 = none)
+
+	local panel = Def.ActorFrame{
+		Name = "ScorePanel_" .. pnShort,
+		DrawOrder = -1,
+		InitCommand = function(self)
+			self:draworder(-1)
+			self:xy(panelX, PANEL_Y)
+			self:visible(GAMESTATE:IsPlayerEnabled(pn))
+			ScorePanelFrame[pn] = self
+		end,
+
+		-- === Refresh all rows when song changes ===
+		SetSongCommand = function(self, params)
+			local song = params and params.Song or nil
+			local st = GAMESTATE:GetCurrentStyle():GetStepsType()
+
+			for i = 1, 5 do
+				local diff = PANEL_DIFFS[i]
+				local rowBG    = self:GetChild("SPRowBG" .. i)
+				local diffText = self:GetChild("SPDiff" .. i)
+				local meterText= self:GetChild("SPMeter" .. i)
+				local gradeText= self:GetChild("SPGrade" .. i)
+				local scoreText= self:GetChild("SPScore" .. i)
+				local lampText = self:GetChild("SPLamp" .. i)
+				local exRawText= self:GetChild("SPExRaw" .. i)
+				local exPctText= self:GetChild("SPExPct" .. i)
+				local flareText= self:GetChild("SPFlare" .. i)
+				local fpText   = self:GetChild("SPFp" .. i)
+
+				local dc = PANEL_DIFF_COLORS[diff] or color("#888888")
+				local hasDiff = song and song:HasStepsTypeAndDifficulty(st, diff)
+
+				if hasDiff then
+					local steps = song:GetOneSteps(st, diff)
+					local data = GetScoreDataForSteps(pn, song, steps)
+					local chartKey = GetChartKey(song, steps)
+					local cr = chartKey and GetChartResult(pn, chartKey)
+
+					-- Diff label
+					if diffText then
+						diffText:settext(PANEL_DIFF_LABELS[i]):diffuse(dc):diffusealpha(1)
+					end
+					-- Meter
+					if meterText then
+						meterText:settext(tostring(steps:GetMeter())):diffuse(dc):diffusealpha(1)
+					end
+
+					if data then
+						if gradeText then
+							gradeText:settext(data.grade):diffuse(Color.White):diffusealpha(1)
+						end
+						if scoreText then
+							scoreText:settext(commify(data.score)):diffuse(Color.White):diffusealpha(1)
+						end
+						if exRawText then
+							exRawText:settext(tostring(data.exRaw)):diffuse(color("#aaeeff")):diffusealpha(1)
+						end
+						if exPctText then
+							exPctText:settext(string.format("%.2f%%", data.exPct)):diffuse(color("#aaeeff")):diffusealpha(1)
+						end
+					else
+						if gradeText then gradeText:settext("---"):diffuse(color("#555555")):diffusealpha(0.6) end
+						if scoreText then scoreText:settext("---"):diffuse(color("#555555")):diffusealpha(0.6) end
+						if exRawText then exRawText:settext("---"):diffuse(color("#555555")):diffusealpha(0.6) end
+						if exPctText then exPctText:settext("---"):diffuse(color("#555555")):diffusealpha(0.6) end
+					end
+
+					-- Combo lamp + flare from custom save data
+					if cr then
+						if lampText then
+							local lampStr = cr.lamp or "---"
+							lampText:settext(lampStr)
+							lampText:diffuse(LampColors[lampStr] or color("#555555"))
+							lampText:diffusealpha(1)
+						end
+						if flareText then
+							local fg = GetFlareGradeDisplay(cr.flareGauge)
+							flareText:settext(fg):diffuse(color("#ffcc66")):diffusealpha(fg == "---" and 0.4 or 1)
+						end
+						if fpText then
+							local fp = cr.flarePoints or 0
+							fpText:settext(fp > 0 and tostring(fp) or "---")
+							fpText:diffuse(color("#ffcc66")):diffusealpha(fp > 0 and 1 or 0.4)
+						end
+					else
+						if lampText then lampText:settext("---"):diffuse(color("#555555")):diffusealpha(0.6) end
+						if flareText then flareText:settext("---"):diffuse(color("#555555")):diffusealpha(0.4) end
+						if fpText then fpText:settext("---"):diffuse(color("#555555")):diffusealpha(0.4) end
+					end
+
+					if rowBG then rowBG:diffusealpha(0) end
+				else
+					-- Difficulty doesn't exist — gray out entire row
+					if diffText then diffText:settext(PANEL_DIFF_LABELS[i]):diffuse(color("#333333")):diffusealpha(0.35) end
+					if meterText then meterText:settext("--"):diffuse(color("#333333")):diffusealpha(0.35) end
+					if gradeText then gradeText:settext(""):diffusealpha(0) end
+					if scoreText then scoreText:settext(""):diffusealpha(0) end
+					if lampText then lampText:settext(""):diffusealpha(0) end
+					if exRawText then exRawText:settext(""):diffusealpha(0) end
+					if exPctText then exPctText:settext(""):diffusealpha(0) end
+					if flareText then flareText:settext(""):diffusealpha(0) end
+					if fpText then fpText:settext(""):diffusealpha(0) end
+					if rowBG then rowBG:diffusealpha(0) end
+				end
+			end
+
+			-- Re-apply highlight
+			self:playcommand("HighlightDiff")
+		end,
+
+		-- === Highlight the currently selected difficulty ===
+		HighlightDiffCommand = function(self)
+			local steps = GAMESTATE:GetCurrentSteps(pn)
+			local newIdx = 0
+			if steps then
+				local d = steps:GetDifficulty()
+				for i, diff in ipairs(PANEL_DIFFS) do
+					if diff == d then newIdx = i; break end
+				end
+			end
+			for i = 1, 5 do
+				local rowBG = self:GetChild("SPRowBG" .. i)
+				if rowBG then
+					if i == newIdx then
+						rowBG:diffuse(color("#ffffff")):diffusealpha(0.12)
+					else
+						rowBG:diffusealpha(0)
+					end
+				end
+			end
+			curHighlightIdx = newIdx
+		end,
+
+		-- === Highlight by explicit difficulty enum (from diff picker) ===
+		HighlightDiffByEnumCommand = function(self, params)
+			local d = params and params.Difficulty
+			local newIdx = 0
+			if d then
+				for i, diff in ipairs(PANEL_DIFFS) do
+					if diff == d then newIdx = i; break end
+				end
+			end
+			for i = 1, 5 do
+				local rowBG = self:GetChild("SPRowBG" .. i)
+				if rowBG then
+					if i == newIdx then
+						rowBG:diffuse(color("#ffffff")):diffusealpha(0.12)
+					else
+						rowBG:diffusealpha(0)
+					end
+				end
+			end
+			curHighlightIdx = newIdx
+		end,
+
+		-- Background panel
+		Def.Quad{
+			InitCommand = function(self)
+				self:zoomto(PANEL_W, PANEL_H):diffuse(color("#0a0a18")):diffusealpha(0.85)
+			end,
+		},
+		-- Border
+		Def.Quad{
+			InitCommand = function(self)
+				self:zoomto(PANEL_W + 2, PANEL_H + 2):diffuse(color("#334466")):diffusealpha(0.5)
+			end,
+		},
+		-- Column headers
+		LoadFont("Common Normal") .. {
+			InitCommand = function(self)
+				self:xy(-PANEL_W/2 + 8, -PANEL_H/2 + 10):zoom(0.35):halign(0)
+					:settext("DIFF"):diffuse(color("#667788"))
+			end,
+		},
+		LoadFont("Common Normal") .. {
+			InitCommand = function(self)
+				self:xy(-PANEL_W/2 + 44, -PANEL_H/2 + 10):zoom(0.35):halign(0.5)
+					:settext("LV"):diffuse(color("#667788"))
+			end,
+		},
+		LoadFont("Common Normal") .. {
+			InitCommand = function(self)
+				self:xy(-PANEL_W/2 + 68, -PANEL_H/2 + 10):zoom(0.35):halign(0.5)
+					:settext("GRD"):diffuse(color("#667788"))
+			end,
+		},
+		LoadFont("Common Normal") .. {
+			InitCommand = function(self)
+				self:xy(-PANEL_W/2 + 126, -PANEL_H/2 + 10):zoom(0.35):halign(1)
+					:settext("SCORE"):diffuse(color("#667788"))
+			end,
+		},
+		LoadFont("Common Normal") .. {
+			InitCommand = function(self)
+				self:xy(-PANEL_W/2 + 160, -PANEL_H/2 + 10):zoom(0.35):halign(0.5)
+					:settext("LAMP"):diffuse(color("#667788"))
+			end,
+		},
+		LoadFont("Common Normal") .. {
+			InitCommand = function(self)
+				self:xy(-PANEL_W/2 + 210, -PANEL_H/2 + 10):zoom(0.35):halign(1)
+					:settext("EX"):diffuse(color("#667788"))
+			end,
+		},
+		LoadFont("Common Normal") .. {
+			InitCommand = function(self)
+				self:xy(-PANEL_W/2 + 255, -PANEL_H/2 + 10):zoom(0.35):halign(1)
+					:settext("EX%"):diffuse(color("#667788"))
+			end,
+		},
+		LoadFont("Common Normal") .. {
+			InitCommand = function(self)
+				self:xy(-PANEL_W/2 + 295, -PANEL_H/2 + 10):zoom(0.35):halign(0.5)
+					:settext("FLARE"):diffuse(color("#667788"))
+			end,
+		},
+		LoadFont("Common Normal") .. {
+			InitCommand = function(self)
+				self:xy(-PANEL_W/2 + 340, -PANEL_H/2 + 10):zoom(0.35):halign(1)
+					:settext("FP"):diffuse(color("#667788"))
+			end,
+		},
+	}
+
+	-- Build 5 difficulty rows
+	local rowStartY = -PANEL_H/2 + 28
+	for i = 1, 5 do
+		local rowY = rowStartY + (i - 1) * PANEL_ROW_H + PANEL_ROW_H/2
+
+		-- Row highlight background
+		panel[#panel+1] = Def.Quad{
+			Name = "SPRowBG" .. i,
+			InitCommand = function(self)
+				self:y(rowY):zoomto(PANEL_W - 4, PANEL_ROW_H - 2):diffusealpha(0)
+			end,
+		}
+		-- Difficulty label
+		panel[#panel+1] = LoadFont("Common Normal") .. {
+			Name = "SPDiff" .. i,
+			InitCommand = function(self)
+				self:xy(-PANEL_W/2 + 8, rowY):zoom(0.4):halign(0):shadowlength(1)
+			end,
+		}
+		-- Meter
+		panel[#panel+1] = LoadFont("Common Normal") .. {
+			Name = "SPMeter" .. i,
+			InitCommand = function(self)
+				self:xy(-PANEL_W/2 + 44, rowY):zoom(0.45):halign(0.5):shadowlength(1)
+			end,
+		}
+		-- Grade
+		panel[#panel+1] = LoadFont("Common Normal") .. {
+			Name = "SPGrade" .. i,
+			InitCommand = function(self)
+				self:xy(-PANEL_W/2 + 68, rowY):zoom(0.4):halign(0.5):shadowlength(1)
+			end,
+		}
+		-- Score
+		panel[#panel+1] = LoadFont("Common Normal") .. {
+			Name = "SPScore" .. i,
+			InitCommand = function(self)
+				self:xy(-PANEL_W/2 + 126, rowY):zoom(0.38):halign(1):shadowlength(1)
+			end,
+		}
+		-- Combo Lamp
+		panel[#panel+1] = LoadFont("Common Normal") .. {
+			Name = "SPLamp" .. i,
+			InitCommand = function(self)
+				self:xy(-PANEL_W/2 + 160, rowY):zoom(0.35):halign(0.5):shadowlength(1)
+			end,
+		}
+		-- EX Raw
+		panel[#panel+1] = LoadFont("Common Normal") .. {
+			Name = "SPExRaw" .. i,
+			InitCommand = function(self)
+				self:xy(-PANEL_W/2 + 210, rowY):zoom(0.35):halign(1):shadowlength(1)
+			end,
+		}
+		-- EX %
+		panel[#panel+1] = LoadFont("Common Normal") .. {
+			Name = "SPExPct" .. i,
+			InitCommand = function(self)
+				self:xy(-PANEL_W/2 + 255, rowY):zoom(0.35):halign(1):shadowlength(1)
+			end,
+		}
+		-- Flare Grade
+		panel[#panel+1] = LoadFont("Common Normal") .. {
+			Name = "SPFlare" .. i,
+			InitCommand = function(self)
+				self:xy(-PANEL_W/2 + 295, rowY):zoom(0.38):halign(0.5):shadowlength(1)
+			end,
+		}
+		-- Flare Points
+		panel[#panel+1] = LoadFont("Common Normal") .. {
+			Name = "SPFp" .. i,
+			InitCommand = function(self)
+				self:xy(-PANEL_W/2 + 340, rowY):zoom(0.35):halign(1):shadowlength(1)
+			end,
+		}
+	end
+
+	return panel
+end
+
+outer[#outer+1] = MakeScorePanel(PLAYER_1)
+outer[#outer+1] = MakeScorePanel(PLAYER_2)
 
 return outer

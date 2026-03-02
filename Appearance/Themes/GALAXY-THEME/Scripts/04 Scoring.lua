@@ -203,3 +203,62 @@ function GetCountsFromHighScore(hs)
 		ShockRows = 0,  -- approximate: can't perfectly reconstruct from AvoidMine count
 	}
 end
+
+-- ===== MUSIC SELECT SCORE DATA HELPER =====
+-- Returns a table of score data for display, or nil if no score exists.
+-- { score, grade, exRaw, exPct, counts }
+-- Reads from engine HighScoreList (judgment counts) and recomputes DDR scores.
+function GetScoreDataForSteps(pn, song, steps)
+	if not song or not steps then return nil end
+
+	-- Get profile
+	local profile
+	if PROFILEMAN:IsPersistentProfile(pn) then
+		profile = PROFILEMAN:GetProfile(pn)
+	else
+		profile = PROFILEMAN:GetMachineProfile()
+	end
+	if not profile then return nil end
+
+	-- Get high score list
+	local hsl = profile:GetHighScoreList(song, steps)
+	if not hsl then return nil end
+	local scores = hsl:GetHighScores()
+	if not scores or not scores[1] then return nil end
+
+	local hs = scores[1]
+	local counts = GetCountsFromHighScore(hs)
+
+	-- Compute N (total scorable objects) from steps radar
+	local rv = steps:GetRadarValues(pn)
+	local numPanels = GAMESTATE:GetCurrentStyle():ColumnsPerPlayer()
+	local tapsAndHolds = rv:GetValue('RadarCategory_TapsAndHolds')
+	local holds = rv:GetValue('RadarCategory_Holds')
+	local rolls = rv:GetValue('RadarCategory_Rolls')
+	local mines = rv:GetValue('RadarCategory_Mines')
+	local shockRows = math.floor(mines / math.max(numPanels, 1))
+	local N = math.max(tapsAndHolds + holds + rolls + shockRows, 1)
+	local tails = holds + rolls
+
+	local ddrScore = ComputeDDRScore(counts, N)
+	local failed = (hs:GetGrade() == 'Grade_Failed')
+	local grade = GetDDRGrade(ddrScore, failed)
+
+	-- EX score
+	local exRaw = (counts.W1 or 0) * 3 + (counts.W2 or 0) * 2 + (counts.W3 or 0) * 1
+	            + (counts.Held or 0) * 3
+	local exMax = 3 * (N + tails)
+	local exPct = 0
+	if exMax > 0 then
+		exPct = math.floor(exRaw / exMax * 10000) / 100
+	end
+
+	return {
+		score  = ddrScore,
+		grade  = grade,
+		failed = failed,
+		exRaw  = exRaw,
+		exPct  = exPct,
+		counts = counts,
+	}
+end

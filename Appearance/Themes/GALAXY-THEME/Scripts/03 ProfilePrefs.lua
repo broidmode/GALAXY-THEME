@@ -135,6 +135,10 @@ function LoadProfileCustom(profile, dir, pn)
 	end
 	if pn then
 		LoadGalaxySettings(pn, dir)
+		-- Load per-chart results (combo lamp, flare grade, flare points)
+		if LoadChartResults then
+			LoadChartResults(pn, dir)
+		end
 	end
 end
 
@@ -144,6 +148,10 @@ function SaveProfileCustom(profile, dir)
 	local pn = ProfileToPlayerNumber(profile)
 	if pn then
 		SaveGalaxySettings(pn, dir)
+		-- Save per-chart results (combo lamp, flare grade, flare points)
+		if SaveChartResults then
+			SaveChartResults(pn, dir)
+		end
 	end
 end
 
