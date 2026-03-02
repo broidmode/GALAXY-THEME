@@ -1321,9 +1321,12 @@ local function InputHandler(event)
 				if jump and jump.left then
 					local jIdx = FindChoiceIdx(row.choices, "value", jump.left, nil)
 					if jIdx then row.selected = jIdx end
-				else
-					local step = FAST_STEP[rowIdx] or 1
+				elseif FAST_STEP[rowIdx] then
+					local step = FAST_STEP[rowIdx]
 					row.selected = math.max(1, row.selected - step)
+				else
+					-- Default hold behavior: jump to first
+					row.selected = 1
 				end
 			else
 				-- Normal step, clamp at minimum (no cycling)
@@ -1345,9 +1348,12 @@ local function InputHandler(event)
 				if jump and jump.right then
 					local jIdx = FindChoiceIdx(row.choices, "value", jump.right, nil)
 					if jIdx then row.selected = jIdx end
-				else
-					local step = FAST_STEP[rowIdx] or 1
+				elseif FAST_STEP[rowIdx] then
+					local step = FAST_STEP[rowIdx]
 					row.selected = math.min(#row.choices, row.selected + step)
+				else
+					-- Default hold behavior: jump to last
+					row.selected = #row.choices
 				end
 			else
 				-- Normal step, clamp at maximum (no cycling)
