@@ -1215,9 +1215,9 @@ local function MakeSongCard(name)
 
 			local title = self:GetChild("Title")
 			if params.Song then
-				title:settext(params.Song:GetDisplayMainTitle())
+				title:settext(params.Song:GetDisplayMainTitle()):Regen()
 			else
-				title:settext("")
+				title:settext(""):Regen()
 			end
 			title:diffuse(params.HasFocus and Color.White or color("#888888"))
 
@@ -1251,10 +1251,12 @@ local function MakeSongCard(name)
 			Name = "Jacket",
 			InitCommand = function(self) self:y(-27) end,
 		},
-		LoadFont("Common Normal") .. {
+		Def.Text{
+			Font = RodinPath("db"), Size = 40, Text = "",
 			Name = "Title",
 			InitCommand = function(self)
-				self:y(CARD_H/2 - 36):zoom(0.8):maxwidth(CARD_W/0.8 - 20):shadowlength(1)
+				self:y(CARD_H/2 - 36):zoom(0.5)
+				self:maxwidth(CARD_W/0.5 - 20):shadowlength(1)
 			end,
 		},
 	}
@@ -1275,10 +1277,10 @@ local function MakeGroupHeader(name)
 			else
 				bg:diffuse(color("#1a1a1a"))
 			end
-			txt:settext(params.Text or "")
+			txt:settext(params.Text or ""):Regen()
 			txt:diffuse(params.HasFocus and Color.White or
 				(params.IsOpen and color("#aaaacc") or color("#888888")))
-			arrow:settext(params.IsOpen and "v " or "> ")
+			arrow:settext(params.IsOpen and "v " or "> "):Regen()
 			arrow:diffuse(txt:GetDiffuse())
 		end,
 
@@ -1288,16 +1290,19 @@ local function MakeGroupHeader(name)
 				self:zoomto(COLS * totalColW - COL_GAP, HEADER_H):diffuse(color("#1a1a1a"))
 			end,
 		},
-		LoadFont("Common Normal") .. {
+		Def.Text{
+			Font = RodinPath("b"), Size = 40, Text = "",
 			Name = "Text",
 			InitCommand = function(self)
-				self:zoom(0.9):maxwidth((COLS * totalColW - 60) / 0.9):shadowlength(1)
+				self:zoom(0.55)
+				self:maxwidth((COLS * totalColW - 60) / 0.55):shadowlength(1)
 			end,
 		},
-		LoadFont("Common Normal") .. {
+		Def.Text{
+			Font = RodinPath("b"), Size = 40, Text = "",
 			Name = "Arrow",
 			InitCommand = function(self)
-				self:x((COLS * totalColW) / 2 - 20):zoom(0.85)
+				self:x((COLS * totalColW) / 2 - 20):zoom(0.5)
 			end,
 		},
 	}
@@ -1333,12 +1338,12 @@ local function MakeMenu(pn)
 					rowBG:diffuse(i == MenuRow[pn] and color("#333366") or color("#00000000"))
 				end
 				if label then
-					label:settext(row and row.name or MENU_ROW_NAMES[i])
+					label:settext(row and row.name or MENU_ROW_NAMES[i]):Regen()
 					label:diffuse(i == MenuRow[pn] and Color.White or color("#888888"))
 				end
 				if value then
 					local ch = row and row.choices[row.selected]
-					value:settext(ch and ch.label or "")
+					value:settext(ch and ch.label or ""):Regen()
 					value:diffuse(i == MenuRow[pn] and Color.White or color("#aaaaaa"))
 				end
 			end
@@ -1348,7 +1353,7 @@ local function MakeMenu(pn)
 			if preview and rows[1] and rows[2] then
 				local song = GAMESTATE:GetCurrentSong()
 				if not song then
-					preview:settext("")
+					preview:settext(""):Regen()
 				else
 					local mode = SpeedModes[rows[1].selected].value
 					local val  = rows[2].choices[rows[2].selected].value
@@ -1384,9 +1389,9 @@ local function MakeMenu(pn)
 					end
 
 					if eMin == eMax then
-						preview:settext(eMin .. " BPM")
+						preview:settext(eMin .. " BPM"):Regen()
 					else
-						preview:settext(eMin .. " - " .. eMode .. " - " .. eMax)
+						preview:settext(eMin .. " - " .. eMode .. " - " .. eMax):Regen()
 					end
 				end
 			end
@@ -1410,13 +1415,14 @@ local function MakeMenu(pn)
 			end,
 		},
 		-- Title
-		LoadFont("Common Normal") .. {
+		Def.Text{
+			Font = RodinPath("eb"), Size = 40,
+			Text = "OPTIONS",
 			InitCommand = function(self)
 				self:xy(menuX, topY + MENU_PAD + 14)
-					:zoom(0.7)
-					:settext("OPTIONS")
+					:zoom(0.45)
 					:diffuse(Color.White)
-					:shadowlength(1)
+				self:shadowlength(1)
 			end,
 		},
 		-- Divider line under title
@@ -1443,51 +1449,50 @@ local function MakeMenu(pn)
 			end,
 		}
 		-- Label
-		m[#m+1] = LoadFont("Common Normal") .. {
+		m[#m+1] = Def.Text{
+			Font = RodinPath("m"), Size = 40,
 			Name = "Label"..i,
+			Text = MENU_ROW_NAMES[i],
 			InitCommand = function(self)
 				self:xy(menuX - MENU_W/2 + MENU_PAD + 8, rowY)
-					:zoom(0.6)
-					:halign(0)
-					:settext(MENU_ROW_NAMES[i])
+					:zoom(0.45)
 					:diffuse(color("#888888"))
-					:shadowlength(1)
+				self:halign(0):maxwidth((MENU_W/2 - MENU_PAD*2) / 0.45):shadowlength(1)
 			end,
 		}
 		-- Value (populated by Refresh)
-		m[#m+1] = LoadFont("Common Normal") .. {
+		m[#m+1] = Def.Text{
+			Font = RodinPath("db"), Size = 40, Text = "",
 			Name = "Value"..i,
 			InitCommand = function(self)
 				self:xy(menuX + MENU_W/2 - MENU_PAD - 8, rowY)
-					:zoom(0.55)
-					:halign(1)
-					:settext("")
-					:maxwidth(220/0.55)
+					:zoom(0.4)
 					:diffuse(color("#aaaaaa"))
-					:shadowlength(1)
+				self:halign(1):maxwidth(220/0.4):shadowlength(1)
 			end,
 		}
 	end
 
 	-- Speed BPM preview (displayed below the Speed row)
 	local speedRowY = topY + MENU_PAD + 36 + (2 - 1) * MENU_ROW_H + MENU_ROW_H/2
-	m[#m+1] = LoadFont("Common Normal") .. {
+	m[#m+1] = Def.Text{
+		Font = RodinPath("m"), Size = 40, Text = "",
 		Name = "SpeedPreview",
 		InitCommand = function(self)
 			self:xy(menuX + MENU_W/2 - MENU_PAD - 8, speedRowY + 13)
-				:zoom(0.38)
-				:halign(1)
-				:settext("")
+				:zoom(0.25)
 				:diffuse(color("#66aaff"))
-				:shadowlength(1)
+			self:halign(1):shadowlength(1)
 		end,
 	}
 
 	-- Arrow indicators
-	m[#m+1] = LoadFont("Common Normal") .. {
+	m[#m+1] = Def.Text{
+		Font = RodinPath("b"), Size = 40,
 		Name = "ArrowL",
+		Text = "<",
 		InitCommand = function(self)
-			self:xy(menuX + 40, 0):zoom(0.6):settext("<"):diffuse(color("#666688"))
+			self:xy(menuX + 40, 0):zoom(0.4):diffuse(color("#666688"))
 		end,
 		RefreshCommand = function(self)
 			local mr = MenuRow[pn] or 1
@@ -1495,10 +1500,12 @@ local function MakeMenu(pn)
 			self:y(rowY)
 		end,
 	}
-	m[#m+1] = LoadFont("Common Normal") .. {
+	m[#m+1] = Def.Text{
+		Font = RodinPath("b"), Size = 40,
 		Name = "ArrowR",
+		Text = ">",
 		InitCommand = function(self)
-			self:xy(menuX + MENU_W/2 - MENU_PAD + 4, 0):zoom(0.6):settext(">"):diffuse(color("#666688"))
+			self:xy(menuX + MENU_W/2 - MENU_PAD + 4, 0):zoom(0.4):diffuse(color("#666688"))
 		end,
 		RefreshCommand = function(self)
 			local mr = MenuRow[pn] or 1
@@ -1508,14 +1515,15 @@ local function MakeMenu(pn)
 	}
 
 	-- Footer hint
-	m[#m+1] = LoadFont("Common Normal") .. {
+	m[#m+1] = Def.Text{
+		Font = RodinPath("l"), Size = 40,
+		Text = "Select/Start: Confirm   Back: Cancel",
 		InitCommand = function(self)
 			local footY = topY + MENU_PAD + 36 + numRows * MENU_ROW_H + MENU_PAD + 8
 			self:xy(menuX, footY)
-				:zoom(0.38)
-				:settext("Select/Start: Confirm   Back: Cancel")
+				:zoom(0.25)
 				:diffuse(color("#555566"))
-				:shadowlength(1)
+			self:shadowlength(1)
 		end,
 	}
 
@@ -1657,7 +1665,8 @@ local function MakeDiffPicker(pn)
 			if title then
 				local songName = DiffSong and DiffSong:GetDisplayMainTitle() or ""
 				local heading = isVersus and (pColors.label.." - "..songName) or songName
-				title:y(topY + 20):settext(heading)
+				title:y(topY + 20)
+			title:settext(heading):Regen()
 			end
 
 			local selIdx = DiffPickIdx[pn] or 1
@@ -1678,12 +1687,12 @@ local function MakeDiffPicker(pn)
 					end
 					if label then
 						label:visible(true):y(rowY)
-						label:settext(ToEnumShortString(st:GetDifficulty()))
+						label:settext(ToEnumShortString(st:GetDifficulty())):Regen()
 						label:diffuse(sel and dc or color("#888888"))
 					end
 					if meter then
 						meter:visible(true):y(rowY)
-						meter:settext(tostring(st:GetMeter()))
+						meter:settext(tostring(st:GetMeter())):Regen()
 						meter:diffuse(sel and dc or color("#666666"))
 					end
 				else
@@ -1711,12 +1720,13 @@ local function MakeDiffPicker(pn)
 			end,
 		},
 		-- Title / player heading
-		LoadFont("Common Normal") .. {
+		Def.Text{
+			Font = RodinPath("db"), Size = 40, Text = "",
 			Name = "DiffTitle",
 			InitCommand = function(self)
-				self:x(boxX):zoom(0.6)
-					:maxwidth(DIFF_W / 0.6 - 40)
-					:diffuse(Color.White):shadowlength(1)
+				self:x(boxX):zoom(0.4)
+					:diffuse(Color.White)
+				self:maxwidth(DIFF_W / 0.4 - 40):shadowlength(1)
 			end,
 		},
 	}
@@ -1729,18 +1739,22 @@ local function MakeDiffPicker(pn)
 				self:x(boxX):zoomto(DIFF_W - 8, DIFF_ROW_H - 6):visible(false)
 			end,
 		}
-		m[#m+1] = LoadFont("Common Normal") .. {
+		m[#m+1] = Def.Text{
+			Font = RodinPath("m"), Size = 40, Text = "",
 			Name = "DiffLabel"..i,
 			InitCommand = function(self)
-				self:x(boxX - DIFF_W/2 + 20):zoom(0.65)
-					:halign(0):shadowlength(1):visible(false)
+				self:x(boxX - DIFF_W/2 + 20):zoom(0.4)
+					:visible(false)
+				self:halign(0):shadowlength(1)
 			end,
 		}
-		m[#m+1] = LoadFont("Common Normal") .. {
+		m[#m+1] = Def.Text{
+			Font = RodinPath("b"), Size = 40, Text = "",
 			Name = "DiffMeter"..i,
 			InitCommand = function(self)
-				self:x(boxX + DIFF_W/2 - 20):zoom(0.7)
-					:halign(1):shadowlength(1):visible(false)
+				self:x(boxX + DIFF_W/2 - 20):zoom(0.45)
+					:visible(false)
+				self:halign(1):shadowlength(1)
 			end,
 		}
 	end
@@ -1775,8 +1789,10 @@ local infoPanel = Def.ActorFrame{
 		if song then
 			bg:visible(true)
 			border:visible(true)
-			title:settext(song:GetDisplayMainTitle()):visible(true)
-			artist:settext(song:GetDisplayArtist()):visible(true)
+			title:visible(true)
+			title:settext(song:GetDisplayMainTitle()):Regen()
+			artist:visible(true)
+			artist:settext(song:GetDisplayArtist()):Regen()
 			jacket:Load(GetJacketPath(song))
 			jacket:scaletoclipped(60, 60)
 			jacket:visible(true)
@@ -1793,16 +1809,21 @@ local infoPanel = Def.ActorFrame{
 			end
 
 			if minBPM == maxBPM then
-				bpmText:settext(tostring(minBPM) .. " BPM"):visible(true)
+				bpmText:visible(true)
+				bpmText:settext(tostring(minBPM) .. " BPM"):Regen()
 			else
-				bpmText:settext(minBPM .. " - " .. modeBPM .. " - " .. maxBPM .. " BPM"):visible(true)
+				bpmText:visible(true)
+				bpmText:settext(minBPM .. " - " .. modeBPM .. " - " .. maxBPM .. " BPM"):Regen()
 			end
 		else
 			bg:visible(false)
 			border:visible(false)
-			title:settext(""):visible(false)
-			artist:settext(""):visible(false)
-			bpmText:settext(""):visible(false)
+			title:visible(false)
+			title:settext(""):Regen()
+			artist:visible(false)
+			artist:settext(""):Regen()
+			bpmText:visible(false)
+			bpmText:settext(""):Regen()
 			jacket:visible(false)
 		end
 	end,
@@ -1831,35 +1852,39 @@ local infoPanel = Def.ActorFrame{
 		end,
 	},
 	-- Song title
-	LoadFont("Common Normal") .. {
+	Def.Text{
+		Font = RodinPath("db"), Size = 40, Text = "",
 		Name = "InfoTitle",
 		InitCommand = function(self)
 			self:xy(-INFO_BAR_W/2 + 82, -12)
-				:zoom(0.75):halign(0):valign(0.5)
-				:maxwidth((INFO_BAR_W - 130)/0.75)
-				:diffuse(Color.White):shadowlength(1)
+				:zoom(0.5)
+				:diffuse(Color.White)
 				:visible(false)
+			self:halign(0):valign(0.5):maxwidth((INFO_BAR_W - 130)/0.5):shadowlength(1)
 		end,
 	},
 	-- Artist
-	LoadFont("Common Normal") .. {
+	Def.Text{
+		Font = RodinPath("m"), Size = 40, Text = "",
 		Name = "InfoArtist",
 		InitCommand = function(self)
 			self:xy(-INFO_BAR_W/2 + 82, 12)
-				:zoom(0.5):halign(0):valign(0.5)
-				:maxwidth((INFO_BAR_W - 130)/0.5)
-				:diffuse(color("#aaaaaa")):shadowlength(1)
+				:zoom(0.35)
+				:diffuse(color("#aaaaaa"))
 				:visible(false)
+			self:halign(0):valign(0.5):maxwidth((INFO_BAR_W - 130)/0.35):shadowlength(1)
 		end,
 	},
 	-- BPM
-	LoadFont("Common Normal") .. {
+	Def.Text{
+		Font = RodinPath("b"), Size = 40, Text = "",
 		Name = "InfoBPM",
 		InitCommand = function(self)
 			self:xy(INFO_BAR_W/2 - 15, 0)
-				:zoom(0.55):halign(1):valign(0.5)
-				:diffuse(color("#66aaff")):shadowlength(1)
+				:zoom(0.35)
+				:diffuse(color("#66aaff"))
 				:visible(false)
+			self:halign(1):valign(0.5):shadowlength(1)
 		end,
 	},
 }
@@ -2000,68 +2025,75 @@ local function MakeScorePanel(pn)
 
 					-- Diff label
 					if diffText then
-						diffText:settext(PANEL_DIFF_LABELS[i]):diffuse(dc):diffusealpha(1)
+						diffText:settext(PANEL_DIFF_LABELS[i]):Regen()
+						diffText:diffuse(dc):diffusealpha(1)
 					end
 					-- Meter
 					if meterText then
-						meterText:settext(tostring(steps:GetMeter())):diffuse(dc):diffusealpha(1)
+						meterText:settext(tostring(steps:GetMeter())):Regen()
+						meterText:diffuse(dc):diffusealpha(1)
 					end
 
 					if data then
 						if gradeText then
-							gradeText:settext(data.grade):diffuse(Color.White):diffusealpha(1)
+							gradeText:settext(data.grade):Regen()
+							gradeText:diffuse(Color.White):diffusealpha(1)
 						end
 						if scoreText then
-							scoreText:settext(commify(data.score)):diffuse(Color.White):diffusealpha(1)
+							scoreText:settext(commify(data.score)):Regen()
+							scoreText:diffuse(Color.White):diffusealpha(1)
 						end
 						if exRawText then
-							exRawText:settext(tostring(data.exRaw)):diffuse(color("#aaeeff")):diffusealpha(1)
+							exRawText:settext(tostring(data.exRaw)):Regen()
+							exRawText:diffuse(color("#aaeeff")):diffusealpha(1)
 						end
 						if exPctText then
-							exPctText:settext(string.format("%.2f%%", data.exPct)):diffuse(color("#aaeeff")):diffusealpha(1)
+							exPctText:settext(string.format("%.2f%%", data.exPct)):Regen()
+							exPctText:diffuse(color("#aaeeff")):diffusealpha(1)
 						end
 					else
-						if gradeText then gradeText:settext("---"):diffuse(color("#555555")):diffusealpha(0.6) end
-						if scoreText then scoreText:settext("---"):diffuse(color("#555555")):diffusealpha(0.6) end
-						if exRawText then exRawText:settext("---"):diffuse(color("#555555")):diffusealpha(0.6) end
-						if exPctText then exPctText:settext("---"):diffuse(color("#555555")):diffusealpha(0.6) end
+						if gradeText then gradeText:settext("---"):Regen(); gradeText:diffuse(color("#555555")):diffusealpha(0.6) end
+						if scoreText then scoreText:settext("---"):Regen(); scoreText:diffuse(color("#555555")):diffusealpha(0.6) end
+						if exRawText then exRawText:settext("---"):Regen(); exRawText:diffuse(color("#555555")):diffusealpha(0.6) end
+						if exPctText then exPctText:settext("---"):Regen(); exPctText:diffuse(color("#555555")):diffusealpha(0.6) end
 					end
 
 					-- Combo lamp + flare from custom save data
 					if cr then
 						if lampText then
 							local lampStr = cr.lamp or "---"
-							lampText:settext(lampStr)
+							lampText:settext(lampStr):Regen()
 							lampText:diffuse(LampColors[lampStr] or color("#555555"))
 							lampText:diffusealpha(1)
 						end
 						if flareText then
 							local fg = GetFlareGradeDisplay(cr.flareGauge)
-							flareText:settext(fg):diffuse(color("#ffcc66")):diffusealpha(fg == "---" and 0.4 or 1)
+							flareText:settext(fg):Regen()
+							flareText:diffuse(color("#ffcc66")):diffusealpha(fg == "---" and 0.4 or 1)
 						end
 						if fpText then
 							local fp = cr.flarePoints or 0
-							fpText:settext(fp > 0 and tostring(fp) or "---")
+							fpText:settext(fp > 0 and tostring(fp) or "---"):Regen()
 							fpText:diffuse(color("#ffcc66")):diffusealpha(fp > 0 and 1 or 0.4)
 						end
 					else
-						if lampText then lampText:settext("---"):diffuse(color("#555555")):diffusealpha(0.6) end
-						if flareText then flareText:settext("---"):diffuse(color("#555555")):diffusealpha(0.4) end
-						if fpText then fpText:settext("---"):diffuse(color("#555555")):diffusealpha(0.4) end
+						if lampText then lampText:settext("---"):Regen(); lampText:diffuse(color("#555555")):diffusealpha(0.6) end
+						if flareText then flareText:settext("---"):Regen(); flareText:diffuse(color("#555555")):diffusealpha(0.4) end
+						if fpText then fpText:settext("---"):Regen(); fpText:diffuse(color("#555555")):diffusealpha(0.4) end
 					end
 
 					if rowBG then rowBG:diffusealpha(0) end
 				else
 					-- Difficulty doesn't exist — gray out entire row
-					if diffText then diffText:settext(PANEL_DIFF_LABELS[i]):diffuse(color("#333333")):diffusealpha(0.35) end
-					if meterText then meterText:settext("--"):diffuse(color("#333333")):diffusealpha(0.35) end
-					if gradeText then gradeText:settext(""):diffusealpha(0) end
-					if scoreText then scoreText:settext(""):diffusealpha(0) end
-					if lampText then lampText:settext(""):diffusealpha(0) end
-					if exRawText then exRawText:settext(""):diffusealpha(0) end
-					if exPctText then exPctText:settext(""):diffusealpha(0) end
-					if flareText then flareText:settext(""):diffusealpha(0) end
-					if fpText then fpText:settext(""):diffusealpha(0) end
+					if diffText then diffText:settext(PANEL_DIFF_LABELS[i]):Regen(); diffText:diffuse(color("#333333")):diffusealpha(0.35) end
+					if meterText then meterText:settext("--"):Regen(); meterText:diffuse(color("#333333")):diffusealpha(0.35) end
+					if gradeText then gradeText:settext(""):Regen(); gradeText:diffusealpha(0) end
+					if scoreText then scoreText:settext(""):Regen(); scoreText:diffusealpha(0) end
+					if lampText then lampText:settext(""):Regen(); lampText:diffusealpha(0) end
+					if exRawText then exRawText:settext(""):Regen(); exRawText:diffusealpha(0) end
+					if exPctText then exPctText:settext(""):Regen(); exPctText:diffusealpha(0) end
+					if flareText then flareText:settext(""):Regen(); flareText:diffusealpha(0) end
+					if fpText then fpText:settext(""):Regen(); fpText:diffusealpha(0) end
 					if rowBG then rowBG:diffusealpha(0) end
 				end
 			end
@@ -2128,58 +2160,58 @@ local function MakeScorePanel(pn)
 			end,
 		},
 		-- Column headers
-		LoadFont("Common Normal") .. {
+		Def.Text{ Font = RodinPath("db"), Size = 40, Text = "DIFF",
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 12, -PANEL_H/2 + 12):zoom(0.45):halign(0)
-					:settext("DIFF"):diffuse(color("#667788"))
+				self:xy(-PANEL_W/2 + 12, -PANEL_H/2 + 12):zoom(0.3):diffuse(color("#667788"))
+				self:halign(0)
 			end,
 		},
-		LoadFont("Common Normal") .. {
+		Def.Text{ Font = RodinPath("db"), Size = 40, Text = "LV",
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 65, -PANEL_H/2 + 12):zoom(0.45):halign(0.5)
-					:settext("LV"):diffuse(color("#667788"))
+				self:xy(-PANEL_W/2 + 65, -PANEL_H/2 + 12):zoom(0.3):diffuse(color("#667788"))
+				self:halign(0.5)
 			end,
 		},
-		LoadFont("Common Normal") .. {
+		Def.Text{ Font = RodinPath("db"), Size = 40, Text = "GRD",
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 100, -PANEL_H/2 + 12):zoom(0.45):halign(0.5)
-					:settext("GRD"):diffuse(color("#667788"))
+				self:xy(-PANEL_W/2 + 100, -PANEL_H/2 + 12):zoom(0.3):diffuse(color("#667788"))
+				self:halign(0.5)
 			end,
 		},
-		LoadFont("Common Normal") .. {
+		Def.Text{ Font = RodinPath("db"), Size = 40, Text = "SCORE",
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 185, -PANEL_H/2 + 12):zoom(0.45):halign(1)
-					:settext("SCORE"):diffuse(color("#667788"))
+				self:xy(-PANEL_W/2 + 185, -PANEL_H/2 + 12):zoom(0.3):diffuse(color("#667788"))
+				self:halign(1)
 			end,
 		},
-		LoadFont("Common Normal") .. {
+		Def.Text{ Font = RodinPath("db"), Size = 40, Text = "LAMP",
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 235, -PANEL_H/2 + 12):zoom(0.45):halign(0.5)
-					:settext("LAMP"):diffuse(color("#667788"))
+				self:xy(-PANEL_W/2 + 235, -PANEL_H/2 + 12):zoom(0.3):diffuse(color("#667788"))
+				self:halign(0.5)
 			end,
 		},
-		LoadFont("Common Normal") .. {
+		Def.Text{ Font = RodinPath("db"), Size = 40, Text = "EX",
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 310, -PANEL_H/2 + 12):zoom(0.45):halign(1)
-					:settext("EX"):diffuse(color("#667788"))
+				self:xy(-PANEL_W/2 + 310, -PANEL_H/2 + 12):zoom(0.3):diffuse(color("#667788"))
+				self:halign(1)
 			end,
 		},
-		LoadFont("Common Normal") .. {
+		Def.Text{ Font = RodinPath("db"), Size = 40, Text = "EX%",
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 375, -PANEL_H/2 + 12):zoom(0.45):halign(1)
-					:settext("EX%"):diffuse(color("#667788"))
+				self:xy(-PANEL_W/2 + 375, -PANEL_H/2 + 12):zoom(0.3):diffuse(color("#667788"))
+				self:halign(1)
 			end,
 		},
-		LoadFont("Common Normal") .. {
+		Def.Text{ Font = RodinPath("db"), Size = 40, Text = "FLARE",
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 435, -PANEL_H/2 + 12):zoom(0.45):halign(0.5)
-					:settext("FLARE"):diffuse(color("#667788"))
+				self:xy(-PANEL_W/2 + 435, -PANEL_H/2 + 12):zoom(0.3):diffuse(color("#667788"))
+				self:halign(0.5)
 			end,
 		},
-		LoadFont("Common Normal") .. {
+		Def.Text{ Font = RodinPath("db"), Size = 40, Text = "FP",
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 500, -PANEL_H/2 + 12):zoom(0.45):halign(1)
-					:settext("FP"):diffuse(color("#667788"))
+				self:xy(-PANEL_W/2 + 500, -PANEL_H/2 + 12):zoom(0.3):diffuse(color("#667788"))
+				self:halign(1)
 			end,
 		},
 	}
@@ -2197,66 +2229,75 @@ local function MakeScorePanel(pn)
 			end,
 		}
 		-- Difficulty label
-		panel[#panel+1] = LoadFont("Common Normal") .. {
+		panel[#panel+1] = Def.Text{ Font = RodinPath("m"), Size = 40, Text = "",
 			Name = "SPDiff" .. i,
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 12, rowY):zoom(0.55):halign(0):shadowlength(1)
+				self:xy(-PANEL_W/2 + 12, rowY):zoom(0.35)
+				self:halign(0):shadowlength(1)
 			end,
 		}
 		-- Meter
-		panel[#panel+1] = LoadFont("Common Normal") .. {
+		panel[#panel+1] = Def.Text{ Font = RodinPath("b"), Size = 40, Text = "",
 			Name = "SPMeter" .. i,
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 65, rowY):zoom(0.6):halign(0.5):shadowlength(1)
+				self:xy(-PANEL_W/2 + 65, rowY):zoom(0.38)
+				self:halign(0.5):shadowlength(1)
 			end,
 		}
 		-- Grade
-		panel[#panel+1] = LoadFont("Common Normal") .. {
+		panel[#panel+1] = Def.Text{ Font = RodinPath("db"), Size = 40, Text = "",
 			Name = "SPGrade" .. i,
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 100, rowY):zoom(0.55):halign(0.5):shadowlength(1)
+				self:xy(-PANEL_W/2 + 100, rowY):zoom(0.35)
+				self:halign(0.5):shadowlength(1)
 			end,
 		}
 		-- Score
-		panel[#panel+1] = LoadFont("Common Normal") .. {
+		panel[#panel+1] = Def.Text{ Font = RodinPath("db"), Size = 40, Text = "",
 			Name = "SPScore" .. i,
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 185, rowY):zoom(0.5):halign(1):shadowlength(1)
+				self:xy(-PANEL_W/2 + 185, rowY):zoom(0.32)
+				self:halign(1):shadowlength(1)
 			end,
 		}
 		-- Combo Lamp
-		panel[#panel+1] = LoadFont("Common Normal") .. {
+		panel[#panel+1] = Def.Text{ Font = RodinPath("m"), Size = 40, Text = "",
 			Name = "SPLamp" .. i,
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 235, rowY):zoom(0.48):halign(0.5):shadowlength(1)
+				self:xy(-PANEL_W/2 + 235, rowY):zoom(0.3)
+				self:halign(0.5):shadowlength(1)
 			end,
 		}
 		-- EX Raw
-		panel[#panel+1] = LoadFont("Common Normal") .. {
+		panel[#panel+1] = Def.Text{ Font = RodinPath("m"), Size = 40, Text = "",
 			Name = "SPExRaw" .. i,
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 310, rowY):zoom(0.48):halign(1):shadowlength(1)
+				self:xy(-PANEL_W/2 + 310, rowY):zoom(0.3)
+				self:halign(1):shadowlength(1)
 			end,
 		}
 		-- EX %
-		panel[#panel+1] = LoadFont("Common Normal") .. {
+		panel[#panel+1] = Def.Text{ Font = RodinPath("m"), Size = 40, Text = "",
 			Name = "SPExPct" .. i,
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 375, rowY):zoom(0.48):halign(1):shadowlength(1)
+				self:xy(-PANEL_W/2 + 375, rowY):zoom(0.3)
+				self:halign(1):shadowlength(1)
 			end,
 		}
 		-- Flare Grade
-		panel[#panel+1] = LoadFont("Common Normal") .. {
+		panel[#panel+1] = Def.Text{ Font = RodinPath("db"), Size = 40, Text = "",
 			Name = "SPFlare" .. i,
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 435, rowY):zoom(0.5):halign(0.5):shadowlength(1)
+				self:xy(-PANEL_W/2 + 435, rowY):zoom(0.32)
+				self:halign(0.5):shadowlength(1)
 			end,
 		}
 		-- Flare Points
-		panel[#panel+1] = LoadFont("Common Normal") .. {
+		panel[#panel+1] = Def.Text{ Font = RodinPath("m"), Size = 40, Text = "",
 			Name = "SPFp" .. i,
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 500, rowY):zoom(0.48):halign(1):shadowlength(1)
+				self:xy(-PANEL_W/2 + 500, rowY):zoom(0.3)
+				self:halign(1):shadowlength(1)
 			end,
 		}
 	end

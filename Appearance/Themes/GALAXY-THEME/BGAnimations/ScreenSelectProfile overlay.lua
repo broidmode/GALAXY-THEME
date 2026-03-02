@@ -8,16 +8,16 @@ function GetLocalProfiles()
 	local t = {}
 	-- Guest entry (always first — scroller item 0)
 	t[#t+1] = Def.ActorFrame{
-		LoadFont("Common Normal") .. {
-			Text = "Guest",
+		Def.Text{ Font = RodinPath("db"), Size = 40, Text = "Guest",
 			InitCommand = function(self)
-				self:zoom(0.75):y(-6):shadowlength(1):diffuse(color("#66aaff")):ztest(true)
+				self:zoom(0.75):y(-6):diffuse(color("#66aaff")):ztest(true)
+				self:shadowlength(1)
 			end,
 		},
-		LoadFont("Common Normal") .. {
-			Text = "Play without saving",
+		Def.Text{ Font = RodinPath("m"), Size = 40, Text = "Play without saving",
 			InitCommand = function(self)
-				self:zoom(0.45):y(10):shadowlength(1):diffuse(color("#888888")):ztest(true)
+				self:zoom(0.45):y(10):diffuse(color("#888888")):ztest(true)
+				self:shadowlength(1)
 			end,
 		},
 	}
@@ -30,16 +30,16 @@ function GetLocalProfiles()
 			or  numSongs.." songs played"
 
 		t[#t+1] = Def.ActorFrame{
-			LoadFont("Common Normal") .. {
-				Text = profile:GetDisplayName(),
+			Def.Text{ Font = RodinPath("db"), Size = 40, Text = profile:GetDisplayName(),
 				InitCommand = function(self)
-					self:zoom(0.75):y(-6):shadowlength(1):diffuse(Color.White):ztest(true)
+					self:zoom(0.75):y(-6):diffuse(Color.White):ztest(true)
+					self:shadowlength(1)
 				end,
 			},
-			LoadFont("Common Normal") .. {
-				Text = songStr,
+			Def.Text{ Font = RodinPath("m"), Size = 40, Text = songStr,
 				InitCommand = function(self)
-					self:zoom(0.45):y(10):shadowlength(1):diffuse(color("#888888")):ztest(true)
+					self:zoom(0.45):y(10):diffuse(color("#888888")):ztest(true)
+					self:shadowlength(1)
 				end,
 			},
 		}
@@ -53,10 +53,10 @@ function LoadPlayerStuff(Player)
 	-- "Press START to join" frame (shown when player not joined)
 	t[#t+1] = Def.ActorFrame{
 		Name = "JoinFrame",
-		LoadFont("Common Normal") .. {
-			Text = "Press START to join",
+		Def.Text{ Font = RodinPath("m"), Size = 40, Text = "Press START to join",
 			InitCommand = function(self)
-				self:shadowlength(1):zoom(0.7):diffuse(color("#888888"))
+				self:zoom(0.7):diffuse(color("#888888"))
+				self:shadowlength(1)
 			end,
 			OnCommand = function(self)
 				self:diffuseshift():effectcolor1(color("#888888")):effectcolor2(color("#444444"))
@@ -72,7 +72,7 @@ function LoadPlayerStuff(Player)
 			self:y(0):SetFastCatchup(true):SetMask(400, 50):SetSecondsPerItem(0.1)
 		end,
 		TransformFunction = function(self, offset, itemIndex, numItems)
-			self:y(math.floor(offset * 36))
+			self:y(math.floor(offset * 50))
 			local focus = scale(math.abs(offset), 0, 2, 1, 0)
 			self:diffusealpha(clamp(focus + 0.3, 0, 1))
 		end,
@@ -80,10 +80,11 @@ function LoadPlayerStuff(Player)
 	}
 
 	-- Selected profile name shown below
-	t[#t+1] = LoadFont("Common Normal") .. {
+	t[#t+1] = Def.Text{ Font = RodinPath("m"), Size = 40, Text = "",
 		Name = "SelectedProfileText",
 		InitCommand = function(self)
-			self:y(130):shadowlength(1):zoom(0.6):diffuse(color("#888888"))
+			self:y(130):zoom(0.6):diffuse(color("#888888"))
+			self:shadowlength(1)
 		end,
 	}
 
@@ -111,11 +112,11 @@ function UpdateInternal3(self, Player)
 			if ind == 0 then
 				-- Guest selected
 				scroller:SetDestinationItem(0)
-				seltext:settext("Guest")
+				seltext:settext("Guest"):Regen()
 			elseif ind > 0 then
 				-- Profile selected (scroller item = ind because Guest is item 0)
 				scroller:SetDestinationItem(ind)
-				seltext:settext(PROFILEMAN:GetLocalProfileFromIndex(ind - 1):GetDisplayName())
+				seltext:settext(PROFILEMAN:GetLocalProfileFromIndex(ind - 1):GetDisplayName()):Regen()
 			else
 				-- Just joined, no selection yet (-1); auto-select first profile
 				if PROFILEMAN:GetNumLocalProfiles() > 0 then
@@ -127,12 +128,12 @@ function UpdateInternal3(self, Player)
 					-- No profiles: default to Guest
 					SCREENMAN:GetTopScreen():SetProfileIndex(Player, 0)
 					scroller:SetDestinationItem(0)
-					seltext:settext("Guest")
+					seltext:settext("Guest"):Regen()
 				end
 			end
 		else
 			scroller:visible(false)
-			seltext:settext("Memory Card")
+			seltext:settext("Memory Card"):Regen()
 			SCREENMAN:GetTopScreen():SetProfileIndex(Player, 0)
 		end
 	else

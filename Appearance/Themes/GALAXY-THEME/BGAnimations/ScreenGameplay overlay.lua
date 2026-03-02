@@ -159,104 +159,96 @@ for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
 	}
 
 	-- Gauge type label (small text below the bar)
-	t[#t+1] = LoadFont("Common Normal") .. {
+	t[#t+1] = Def.Text{ Font = RodinPath("m"), Size = 40, Text = "",
 		Name = "GaugeLabel_" .. ToEnumShortString(pn),
 		InitCommand = function(self)
 			self:xy(barX, BAR_Y + BAR_H/2 + 12)
 				:zoom(0.32)
-				:settext("")
 				:diffuse(color("#aaaaaa"))
-				:shadowlength(1)
+			self:shadowlength(1)
 		end,
 		DoneLoadingNextSongMessageCommand = function(self)
-			self:settext(GetGaugeDisplayName(pn))
+			self:settext(GetGaugeDisplayName(pn)):Regen()
 		end,
 		GalaxyLifeChangedMessageCommand = function(self, params)
 			if params.Player ~= pn then return end
 			if params.GaugeType == "FloatingFlare" and params.FloatingCurrent then
 				local roman = {"I","II","III","IV","V","VI","VII","VIII","IX","EX"}
-				self:settext("Float " .. (roman[params.FloatingCurrent] or "?"))
+				self:settext("Float " .. (roman[params.FloatingCurrent] or "?")):Regen()
 			end
 		end,
 	}
 
 	-- Life percentage text (overlaid on bar)
-	t[#t+1] = LoadFont("Common Normal") .. {
+	t[#t+1] = Def.Text{ Font = RodinPath("db"), Size = 40, Text = "",
 		Name = "BarPct_" .. ToEnumShortString(pn),
 		InitCommand = function(self)
 			self:xy(barX, BAR_Y)
 				:zoom(0.35)
-				:settext("")
 				:diffuse(Color.White)
-				:shadowlength(1)
+			self:shadowlength(1)
 		end,
 		GalaxyLifeChangedMessageCommand = function(self, params)
 			if params.Player ~= pn then return end
 			if params.Failed then
-				self:settext("FAILED")
+				self:settext("FAILED"):Regen()
 				return
 			end
 			local gType = params.GaugeType
 			if gType == "LIFE4" or gType == "Risky" then
 				local lives = math.floor(params.Life)
-				self:settext(lives .. " / " .. (params.MaxLives or 0))
+				self:settext(lives .. " / " .. (params.MaxLives or 0)):Regen()
 			else
 				local pct = math.floor((params.Life or 0) * 100 + 0.5)
-				self:settext(pct .. "%")
+				self:settext(pct .. "%"):Regen()
 			end
 		end,
 	}
 
 	-- Score display
-	t[#t+1] = LoadFont("Common Normal") .. {
+	t[#t+1] = Def.Text{ Font = RodinPath("b"), Size = 40, Text = "",
 		Name = "Score_" .. ToEnumShortString(pn),
 		InitCommand = function(self)
 			self:xy(scoreX, BAR_Y)
 				:zoom(0.7)
-				:halign(isP1 and 0 or 1)
-				:settext("0")
 				:diffuse(Color.White)
-				:shadowlength(1)
+			self:halign(isP1 and 0 or 1):settext("0"):Regen():shadowlength(1)
 		end,
 		GalaxyScoreChangedMessageCommand = function(self, params)
 			if params.Player == pn then
-				self:settext(string.format("%d", params.Score))
+				self:settext(string.format("%d", params.Score)):Regen()
 			end
 		end,
 	}
 
 	-- EX Score display
-	t[#t+1] = LoadFont("Common Normal") .. {
+	t[#t+1] = Def.Text{ Font = RodinPath("m"), Size = 40, Text = "",
 		Name = "EX_" .. ToEnumShortString(pn),
 		InitCommand = function(self)
 			self:xy(scoreX, BAR_Y + 24)
 				:zoom(0.38)
-				:halign(isP1 and 0 or 1)
-				:settext("EX 0.00%")
 				:diffuse(color("#aaaaff"))
-				:shadowlength(1)
+			self:halign(isP1 and 0 or 1):settext("EX 0.00%"):Regen():shadowlength(1)
 		end,
 		GalaxyScoreChangedMessageCommand = function(self, params)
 			if params.Player == pn then
-				self:settext(string.format("EX %.2f%%", params.EXPercent))
+				self:settext(string.format("EX %.2f%%", params.EXPercent)):Regen()
 			end
 		end,
 	}
 
 	-- Grade display
-	t[#t+1] = LoadFont("Common Normal") .. {
+	t[#t+1] = Def.Text{ Font = RodinPath("db"), Size = 40, Text = "",
 		Name = "Grade_" .. ToEnumShortString(pn),
 		InitCommand = function(self)
 			self:xy(scoreX + sideSign * 120, BAR_Y)
 				:zoom(0.55)
-				:halign(0.5)
-				:settext("")
 				:diffuse(color("#ffcc00"))
-				:shadowlength(1)
+			self:halign(0.5):shadowlength(1)
 		end,
 		GalaxyScoreChangedMessageCommand = function(self, params)
 			if params.Player == pn then
-				self:settext(GetCurrentGrade(pn))
+				self:settext(GetCurrentGrade(pn)):Regen()
 			end
 		end,
 	}
