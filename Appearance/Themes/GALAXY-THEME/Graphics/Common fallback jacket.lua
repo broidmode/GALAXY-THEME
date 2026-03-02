@@ -5,9 +5,9 @@ return Def.ActorFrame{
 			self:zoomto(128,128):diffuse(color("#1a1a1a"))
 		end,
 	},
-	Def.Text{ Font = RodinPath("b"), Size = 40, Text = "?",
+	Def.Text{ Font = RodinPath("b"), Size = FONT_L, Text = "?",
 		InitCommand=function(self)
-			self:zoom(2):diffuse(color("#444444"))
+			self:zoom(2 * FONT_ZOOM):diffuse(color("#444444"))
 		end,
 	},
 }

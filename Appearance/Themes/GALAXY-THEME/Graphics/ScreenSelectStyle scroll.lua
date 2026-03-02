@@ -4,16 +4,16 @@ local gc = Var("GameCommand")
 
 local t = Def.ActorFrame{}
 
-t[#t+1] = Def.Text{ Font = RodinPath("db"), Size = 40, Text = gc:GetText(),
+t[#t+1] = Def.Text{ Font = RodinPath("db"), Size = FONT_L, Text = gc:GetText(),
 	InitCommand = function(self)
-		self:zoom(0.75):diffuse(color("#888888"))
-		self:shadowlength(1)
+		self:zoom(FONT_ZOOM):diffuse(color("#888888"))
+		self:shadowlength(0)
 	end,
 	GainFocusCommand = function(self)
-		self:stoptweening():linear(0.1):diffuse(Color.White):zoom(0.85)
+		self:stoptweening():linear(0.1):diffuse(Color.White):zoom(FONT_ZOOM * 1.1)
 	end,
 	LoseFocusCommand = function(self)
-		self:stoptweening():linear(0.1):diffuse(color("#888888")):zoom(0.75)
+		self:stoptweening():linear(0.1):diffuse(color("#888888")):zoom(FONT_ZOOM)
 	end,
 }
 

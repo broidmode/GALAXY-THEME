@@ -159,13 +159,12 @@ for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
 	}
 
 	-- Gauge type label (small text below the bar)
-	t[#t+1] = Def.Text{ Font = RodinPath("m"), Size = 40, Text = "",
+	t[#t+1] = Def.Text{ Font = RodinPath("m"), Size = FONT_S, Text = "",
 		Name = "GaugeLabel_" .. ToEnumShortString(pn),
 		InitCommand = function(self)
 			self:xy(barX, BAR_Y + BAR_H/2 + 12)
-				:zoom(0.32)
-				:diffuse(color("#aaaaaa"))
-			self:shadowlength(1)
+				:zoom(FONT_ZOOM):diffuse(color("#aaaaaa"))
+			self:shadowlength(0)
 		end,
 		DoneLoadingNextSongMessageCommand = function(self)
 			self:settext(GetGaugeDisplayName(pn)):Regen()
@@ -180,13 +179,12 @@ for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
 	}
 
 	-- Life percentage text (overlaid on bar)
-	t[#t+1] = Def.Text{ Font = RodinPath("db"), Size = 40, Text = "",
+	t[#t+1] = Def.Text{ Font = RodinPath("db"), Size = FONT_S, Text = "",
 		Name = "BarPct_" .. ToEnumShortString(pn),
 		InitCommand = function(self)
 			self:xy(barX, BAR_Y)
-				:zoom(0.35)
-				:diffuse(Color.White)
-			self:shadowlength(1)
+				:zoom(FONT_ZOOM):diffuse(Color.White)
+			self:shadowlength(0)
 		end,
 		GalaxyLifeChangedMessageCommand = function(self, params)
 			if params.Player ~= pn then return end
@@ -206,13 +204,12 @@ for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
 	}
 
 	-- Score display
-	t[#t+1] = Def.Text{ Font = RodinPath("b"), Size = 40, Text = "",
+	t[#t+1] = Def.Text{ Font = RodinPath("b"), Size = FONT_L, Text = "",
 		Name = "Score_" .. ToEnumShortString(pn),
 		InitCommand = function(self)
 			self:xy(scoreX, BAR_Y)
-				:zoom(0.7)
-				:diffuse(Color.White)
-			self:halign(isP1 and 0 or 1):settext("0"):Regen():shadowlength(1)
+				:zoom(FONT_ZOOM):diffuse(Color.White)
+			self:halign(isP1 and 0 or 1):settext("0"):Regen():shadowlength(0)
 		end,
 		GalaxyScoreChangedMessageCommand = function(self, params)
 			if params.Player == pn then
@@ -222,13 +219,12 @@ for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
 	}
 
 	-- EX Score display
-	t[#t+1] = Def.Text{ Font = RodinPath("m"), Size = 40, Text = "",
+	t[#t+1] = Def.Text{ Font = RodinPath("m"), Size = FONT_S, Text = "",
 		Name = "EX_" .. ToEnumShortString(pn),
 		InitCommand = function(self)
 			self:xy(scoreX, BAR_Y + 24)
-				:zoom(0.38)
-				:diffuse(color("#aaaaff"))
-			self:halign(isP1 and 0 or 1):settext("EX 0.00%"):Regen():shadowlength(1)
+				:zoom(FONT_ZOOM):diffuse(color("#aaaaff"))
+			self:halign(isP1 and 0 or 1):settext("EX 0.00%"):Regen():shadowlength(0)
 		end,
 		GalaxyScoreChangedMessageCommand = function(self, params)
 			if params.Player == pn then
@@ -238,13 +234,12 @@ for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
 	}
 
 	-- Grade display
-	t[#t+1] = Def.Text{ Font = RodinPath("db"), Size = 40, Text = "",
+	t[#t+1] = Def.Text{ Font = RodinPath("db"), Size = FONT_M, Text = "",
 		Name = "Grade_" .. ToEnumShortString(pn),
 		InitCommand = function(self)
 			self:xy(scoreX + sideSign * 120, BAR_Y)
-				:zoom(0.55)
-				:diffuse(color("#ffcc00"))
-			self:halign(0.5):shadowlength(1)
+				:zoom(FONT_ZOOM):diffuse(color("#ffcc00"))
+			self:halign(0.5):shadowlength(0)
 		end,
 		GalaxyScoreChangedMessageCommand = function(self, params)
 			if params.Player == pn then

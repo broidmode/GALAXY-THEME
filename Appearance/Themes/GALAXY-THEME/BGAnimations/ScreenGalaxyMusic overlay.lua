@@ -1283,11 +1283,11 @@ local function MakeSongCard(name)
 			InitCommand = function(self) self:y(-27) end,
 		},
 		Def.Text{
-			Font = RodinPath("db"), Size = 40, Text = "",
+			Font = RodinPath("db"), Size = FONT_M, Text = "",
 			Name = "Title",
 			InitCommand = function(self)
-				self:y(CARD_H/2 - 36):zoom(0.5)
-				self:maxwidth(CARD_W/0.5 - 20):shadowlength(1)
+				self:y(CARD_H/2 - 36):zoom(FONT_ZOOM)
+				self:maxwidth(FontMaxWidth(CARD_W - 10)):shadowlength(0)
 			end,
 		},
 	}
@@ -1322,18 +1322,18 @@ local function MakeGroupHeader(name)
 			end,
 		},
 		Def.Text{
-			Font = RodinPath("b"), Size = 40, Text = "",
+			Font = RodinPath("b"), Size = FONT_M, Text = "",
 			Name = "Text",
 			InitCommand = function(self)
-				self:zoom(0.55)
-				self:maxwidth((COLS * totalColW - 60) / 0.55):shadowlength(1)
+				self:zoom(FONT_ZOOM)
+				self:maxwidth(FontMaxWidth(COLS * totalColW - 60)):shadowlength(0)
 			end,
 		},
 		Def.Text{
-			Font = RodinPath("b"), Size = 40, Text = "",
+			Font = RodinPath("b"), Size = FONT_M, Text = "",
 			Name = "Arrow",
 			InitCommand = function(self)
-				self:x((COLS * totalColW) / 2 - 20):zoom(0.5)
+				self:x((COLS * totalColW) / 2 - 20):zoom(FONT_ZOOM)
 			end,
 		},
 	}
@@ -1447,13 +1447,13 @@ local function MakeMenu(pn)
 		},
 		-- Title
 		Def.Text{
-			Font = RodinPath("eb"), Size = 40,
+			Font = RodinPath("eb"), Size = FONT_M,
 			Text = "OPTIONS",
 			InitCommand = function(self)
 				self:xy(menuX, topY + MENU_PAD + 14)
-					:zoom(0.45)
+					:zoom(FONT_ZOOM)
 					:diffuse(Color.White)
-				self:shadowlength(1)
+				self:shadowlength(0)
 			end,
 		},
 		-- Divider line under title
@@ -1481,25 +1481,25 @@ local function MakeMenu(pn)
 		}
 		-- Label
 		m[#m+1] = Def.Text{
-			Font = RodinPath("m"), Size = 40,
+			Font = RodinPath("m"), Size = FONT_M,
 			Name = "Label"..i,
 			Text = MENU_ROW_NAMES[i],
 			InitCommand = function(self)
 				self:xy(menuX - MENU_W/2 + MENU_PAD + 8, rowY)
-					:zoom(0.45)
+					:zoom(FONT_ZOOM)
 					:diffuse(color("#888888"))
-				self:halign(0):maxwidth((MENU_W/2 - MENU_PAD*2) / 0.45):shadowlength(1)
+				self:halign(0):maxwidth(FontMaxWidth(MENU_W/2 - MENU_PAD*2)):shadowlength(0)
 			end,
 		}
 		-- Value (populated by Refresh)
 		m[#m+1] = Def.Text{
-			Font = RodinPath("db"), Size = 40, Text = "",
+			Font = RodinPath("db"), Size = FONT_S, Text = "",
 			Name = "Value"..i,
 			InitCommand = function(self)
 				self:xy(menuX + MENU_W/2 - MENU_PAD - 8, rowY)
-					:zoom(0.4)
+					:zoom(FONT_ZOOM)
 					:diffuse(color("#aaaaaa"))
-				self:halign(1):maxwidth(220/0.4):shadowlength(1)
+				self:halign(1):maxwidth(FontMaxWidth(220)):shadowlength(0)
 			end,
 		}
 	end
@@ -1507,23 +1507,23 @@ local function MakeMenu(pn)
 	-- Speed BPM preview (displayed below the Speed row)
 	local speedRowY = topY + MENU_PAD + 36 + (2 - 1) * MENU_ROW_H + MENU_ROW_H/2
 	m[#m+1] = Def.Text{
-		Font = RodinPath("m"), Size = 40, Text = "",
+		Font = RodinPath("m"), Size = FONT_S, Text = "",
 		Name = "SpeedPreview",
 		InitCommand = function(self)
 			self:xy(menuX + MENU_W/2 - MENU_PAD - 8, speedRowY + 13)
-				:zoom(0.25)
+				:zoom(FONT_ZOOM)
 				:diffuse(color("#66aaff"))
-			self:halign(1):shadowlength(1)
+			self:halign(1):shadowlength(0)
 		end,
 	}
 
 	-- Arrow indicators
 	m[#m+1] = Def.Text{
-		Font = RodinPath("b"), Size = 40,
+		Font = RodinPath("b"), Size = FONT_S,
 		Name = "ArrowL",
 		Text = "<",
 		InitCommand = function(self)
-			self:xy(menuX + 40, 0):zoom(0.4):diffuse(color("#666688"))
+			self:xy(menuX + 40, 0):zoom(FONT_ZOOM):diffuse(color("#666688"))
 		end,
 		RefreshCommand = function(self)
 			local mr = MenuRow[pn] or 1
@@ -1532,11 +1532,11 @@ local function MakeMenu(pn)
 		end,
 	}
 	m[#m+1] = Def.Text{
-		Font = RodinPath("b"), Size = 40,
+		Font = RodinPath("b"), Size = FONT_S,
 		Name = "ArrowR",
 		Text = ">",
 		InitCommand = function(self)
-			self:xy(menuX + MENU_W/2 - MENU_PAD + 4, 0):zoom(0.4):diffuse(color("#666688"))
+			self:xy(menuX + MENU_W/2 - MENU_PAD + 4, 0):zoom(FONT_ZOOM):diffuse(color("#666688"))
 		end,
 		RefreshCommand = function(self)
 			local mr = MenuRow[pn] or 1
@@ -1547,14 +1547,14 @@ local function MakeMenu(pn)
 
 	-- Footer hint
 	m[#m+1] = Def.Text{
-		Font = RodinPath("l"), Size = 40,
+		Font = RodinPath("l"), Size = FONT_S,
 		Text = "Select/Start: Confirm   Back: Cancel",
 		InitCommand = function(self)
 			local footY = topY + MENU_PAD + 36 + numRows * MENU_ROW_H + MENU_PAD + 8
 			self:xy(menuX, footY)
-				:zoom(0.25)
+				:zoom(FONT_ZOOM)
 				:diffuse(color("#555566"))
-			self:shadowlength(1)
+			self:shadowlength(0)
 		end,
 	}
 
@@ -1757,12 +1757,12 @@ local function MakeDiffPicker(pn)
 		},
 		-- Title / player heading
 		Def.Text{
-			Font = RodinPath("db"), Size = 40, Text = "",
+			Font = RodinPath("db"), Size = FONT_M, Text = "",
 			Name = "DiffTitle",
 			InitCommand = function(self)
-				self:x(boxX):zoom(0.4)
+				self:x(boxX):zoom(FONT_ZOOM)
 					:diffuse(Color.White)
-				self:maxwidth(DIFF_W / 0.4 - 40):shadowlength(1)
+				self:maxwidth(FontMaxWidth(DIFF_W - 16)):shadowlength(0)
 			end,
 		},
 	}
@@ -1776,21 +1776,21 @@ local function MakeDiffPicker(pn)
 			end,
 		}
 		m[#m+1] = Def.Text{
-			Font = RodinPath("m"), Size = 40, Text = "",
+			Font = RodinPath("m"), Size = FONT_S, Text = "",
 			Name = "DiffLabel"..i,
 			InitCommand = function(self)
-				self:x(boxX - DIFF_W/2 + 20):zoom(0.4)
+				self:x(boxX - DIFF_W/2 + 20):zoom(FONT_ZOOM)
 					:visible(false)
-				self:halign(0):shadowlength(1)
+				self:halign(0):shadowlength(0)
 			end,
 		}
 		m[#m+1] = Def.Text{
-			Font = RodinPath("b"), Size = 40, Text = "",
+			Font = RodinPath("b"), Size = FONT_M, Text = "",
 			Name = "DiffMeter"..i,
 			InitCommand = function(self)
-				self:x(boxX + DIFF_W/2 - 20):zoom(0.45)
+				self:x(boxX + DIFF_W/2 - 20):zoom(FONT_ZOOM)
 					:visible(false)
-				self:halign(1):shadowlength(1)
+				self:halign(1):shadowlength(0)
 			end,
 		}
 	end
@@ -1895,38 +1895,38 @@ local infoPanel = Def.ActorFrame{
 	},
 	-- Song title
 	Def.Text{
-		Font = RodinPath("db"), Size = 40, Text = "",
+		Font = RodinPath("db"), Size = FONT_M, Text = "",
 		Name = "InfoTitle",
 		InitCommand = function(self)
 			self:xy(-INFO_BAR_W/2 + 82, -12)
-				:zoom(0.5)
+				:zoom(FONT_ZOOM)
 				:diffuse(Color.White)
 				:visible(false)
-			self:halign(0):valign(0.5):maxwidth((INFO_BAR_W - 130)/0.5):shadowlength(1)
+			self:halign(0):valign(0.5):maxwidth(FontMaxWidth(INFO_BAR_W - 130)):shadowlength(0)
 		end,
 	},
 	-- Artist
 	Def.Text{
-		Font = RodinPath("m"), Size = 40, Text = "",
+		Font = RodinPath("m"), Size = FONT_S, Text = "",
 		Name = "InfoArtist",
 		InitCommand = function(self)
 			self:xy(-INFO_BAR_W/2 + 82, 12)
-				:zoom(0.35)
+				:zoom(FONT_ZOOM)
 				:diffuse(color("#aaaaaa"))
 				:visible(false)
-			self:halign(0):valign(0.5):maxwidth((INFO_BAR_W - 130)/0.35):shadowlength(1)
+			self:halign(0):valign(0.5):maxwidth(FontMaxWidth(INFO_BAR_W - 130)):shadowlength(0)
 		end,
 	},
 	-- BPM
 	Def.Text{
-		Font = RodinPath("b"), Size = 40, Text = "",
+		Font = RodinPath("b"), Size = FONT_S, Text = "",
 		Name = "InfoBPM",
 		InitCommand = function(self)
 			self:xy(INFO_BAR_W/2 - 15, 0)
-				:zoom(0.35)
+				:zoom(FONT_ZOOM)
 				:diffuse(color("#66aaff"))
 				:visible(false)
-			self:halign(1):valign(0.5):shadowlength(1)
+			self:halign(1):valign(0.5):shadowlength(0)
 		end,
 	},
 }
@@ -2215,57 +2215,57 @@ local function MakeScorePanel(pn)
 			end,
 		},
 		-- Column headers
-		Def.Text{ Font = RodinPath("db"), Size = 40, Text = "DIFF",
+		Def.Text{ Font = RodinPath("db"), Size = FONT_S, Text = "DIFF",
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 12, -PANEL_H/2 + 12):zoom(0.3):diffuse(color("#667788"))
+				self:xy(-PANEL_W/2 + 12, -PANEL_H/2 + 12):zoom(FONT_ZOOM):diffuse(color("#667788"))
 				self:halign(0)
 			end,
 		},
-		Def.Text{ Font = RodinPath("db"), Size = 40, Text = "LV",
+		Def.Text{ Font = RodinPath("db"), Size = FONT_S, Text = "LV",
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 65, -PANEL_H/2 + 12):zoom(0.3):diffuse(color("#667788"))
+				self:xy(-PANEL_W/2 + 65, -PANEL_H/2 + 12):zoom(FONT_ZOOM):diffuse(color("#667788"))
 				self:halign(0.5)
 			end,
 		},
-		Def.Text{ Font = RodinPath("db"), Size = 40, Text = "GRD",
+		Def.Text{ Font = RodinPath("db"), Size = FONT_S, Text = "GRD",
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 100, -PANEL_H/2 + 12):zoom(0.3):diffuse(color("#667788"))
+				self:xy(-PANEL_W/2 + 100, -PANEL_H/2 + 12):zoom(FONT_ZOOM):diffuse(color("#667788"))
 				self:halign(0.5)
 			end,
 		},
-		Def.Text{ Font = RodinPath("db"), Size = 40, Text = "SCORE",
+		Def.Text{ Font = RodinPath("db"), Size = FONT_S, Text = "SCORE",
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 185, -PANEL_H/2 + 12):zoom(0.3):diffuse(color("#667788"))
+				self:xy(-PANEL_W/2 + 185, -PANEL_H/2 + 12):zoom(FONT_ZOOM):diffuse(color("#667788"))
 				self:halign(1)
 			end,
 		},
-		Def.Text{ Font = RodinPath("db"), Size = 40, Text = "LAMP",
+		Def.Text{ Font = RodinPath("db"), Size = FONT_S, Text = "LAMP",
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 235, -PANEL_H/2 + 12):zoom(0.3):diffuse(color("#667788"))
+				self:xy(-PANEL_W/2 + 235, -PANEL_H/2 + 12):zoom(FONT_ZOOM):diffuse(color("#667788"))
 				self:halign(0.5)
 			end,
 		},
-		Def.Text{ Font = RodinPath("db"), Size = 40, Text = "EX",
+		Def.Text{ Font = RodinPath("db"), Size = FONT_S, Text = "EX",
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 310, -PANEL_H/2 + 12):zoom(0.3):diffuse(color("#667788"))
+				self:xy(-PANEL_W/2 + 310, -PANEL_H/2 + 12):zoom(FONT_ZOOM):diffuse(color("#667788"))
 				self:halign(1)
 			end,
 		},
-		Def.Text{ Font = RodinPath("db"), Size = 40, Text = "EX%",
+		Def.Text{ Font = RodinPath("db"), Size = FONT_S, Text = "EX%",
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 375, -PANEL_H/2 + 12):zoom(0.3):diffuse(color("#667788"))
+				self:xy(-PANEL_W/2 + 375, -PANEL_H/2 + 12):zoom(FONT_ZOOM):diffuse(color("#667788"))
 				self:halign(1)
 			end,
 		},
-		Def.Text{ Font = RodinPath("db"), Size = 40, Text = "FLARE",
+		Def.Text{ Font = RodinPath("db"), Size = FONT_S, Text = "FLARE",
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 435, -PANEL_H/2 + 12):zoom(0.3):diffuse(color("#667788"))
+				self:xy(-PANEL_W/2 + 435, -PANEL_H/2 + 12):zoom(FONT_ZOOM):diffuse(color("#667788"))
 				self:halign(0.5)
 			end,
 		},
-		Def.Text{ Font = RodinPath("db"), Size = 40, Text = "FP",
+		Def.Text{ Font = RodinPath("db"), Size = FONT_S, Text = "FP",
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 500, -PANEL_H/2 + 12):zoom(0.3):diffuse(color("#667788"))
+				self:xy(-PANEL_W/2 + 500, -PANEL_H/2 + 12):zoom(FONT_ZOOM):diffuse(color("#667788"))
 				self:halign(1)
 			end,
 		},
@@ -2284,75 +2284,75 @@ local function MakeScorePanel(pn)
 			end,
 		}
 		-- Difficulty label
-		panel[#panel+1] = Def.Text{ Font = RodinPath("m"), Size = 40, Text = "",
+		panel[#panel+1] = Def.Text{ Font = RodinPath("m"), Size = FONT_S, Text = "",
 			Name = "SPDiff" .. i,
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 12, rowY):zoom(0.35)
-				self:halign(0):shadowlength(1)
+				self:xy(-PANEL_W/2 + 12, rowY):zoom(FONT_ZOOM)
+				self:halign(0):shadowlength(0)
 			end,
 		}
 		-- Meter
-		panel[#panel+1] = Def.Text{ Font = RodinPath("b"), Size = 40, Text = "",
+		panel[#panel+1] = Def.Text{ Font = RodinPath("b"), Size = FONT_S, Text = "",
 			Name = "SPMeter" .. i,
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 65, rowY):zoom(0.38)
-				self:halign(0.5):shadowlength(1)
+				self:xy(-PANEL_W/2 + 65, rowY):zoom(FONT_ZOOM)
+				self:halign(0.5):shadowlength(0)
 			end,
 		}
 		-- Grade
-		panel[#panel+1] = Def.Text{ Font = RodinPath("db"), Size = 40, Text = "",
+		panel[#panel+1] = Def.Text{ Font = RodinPath("db"), Size = FONT_S, Text = "",
 			Name = "SPGrade" .. i,
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 100, rowY):zoom(0.35)
-				self:halign(0.5):shadowlength(1)
+				self:xy(-PANEL_W/2 + 100, rowY):zoom(FONT_ZOOM)
+				self:halign(0.5):shadowlength(0)
 			end,
 		}
 		-- Score
-		panel[#panel+1] = Def.Text{ Font = RodinPath("db"), Size = 40, Text = "",
+		panel[#panel+1] = Def.Text{ Font = RodinPath("db"), Size = FONT_S, Text = "",
 			Name = "SPScore" .. i,
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 185, rowY):zoom(0.32)
-				self:halign(1):shadowlength(1)
+				self:xy(-PANEL_W/2 + 185, rowY):zoom(FONT_ZOOM)
+				self:halign(1):shadowlength(0)
 			end,
 		}
 		-- Combo Lamp
-		panel[#panel+1] = Def.Text{ Font = RodinPath("m"), Size = 40, Text = "",
+		panel[#panel+1] = Def.Text{ Font = RodinPath("m"), Size = FONT_S, Text = "",
 			Name = "SPLamp" .. i,
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 235, rowY):zoom(0.3)
-				self:halign(0.5):shadowlength(1)
+				self:xy(-PANEL_W/2 + 235, rowY):zoom(FONT_ZOOM)
+				self:halign(0.5):shadowlength(0)
 			end,
 		}
 		-- EX Raw
-		panel[#panel+1] = Def.Text{ Font = RodinPath("m"), Size = 40, Text = "",
+		panel[#panel+1] = Def.Text{ Font = RodinPath("m"), Size = FONT_S, Text = "",
 			Name = "SPExRaw" .. i,
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 310, rowY):zoom(0.3)
-				self:halign(1):shadowlength(1)
+				self:xy(-PANEL_W/2 + 310, rowY):zoom(FONT_ZOOM)
+				self:halign(1):shadowlength(0)
 			end,
 		}
 		-- EX %
-		panel[#panel+1] = Def.Text{ Font = RodinPath("m"), Size = 40, Text = "",
+		panel[#panel+1] = Def.Text{ Font = RodinPath("m"), Size = FONT_S, Text = "",
 			Name = "SPExPct" .. i,
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 375, rowY):zoom(0.3)
-				self:halign(1):shadowlength(1)
+				self:xy(-PANEL_W/2 + 375, rowY):zoom(FONT_ZOOM)
+				self:halign(1):shadowlength(0)
 			end,
 		}
 		-- Flare Grade
-		panel[#panel+1] = Def.Text{ Font = RodinPath("db"), Size = 40, Text = "",
+		panel[#panel+1] = Def.Text{ Font = RodinPath("db"), Size = FONT_S, Text = "",
 			Name = "SPFlare" .. i,
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 435, rowY):zoom(0.32)
-				self:halign(0.5):shadowlength(1)
+				self:xy(-PANEL_W/2 + 435, rowY):zoom(FONT_ZOOM)
+				self:halign(0.5):shadowlength(0)
 			end,
 		}
 		-- Flare Points
-		panel[#panel+1] = Def.Text{ Font = RodinPath("m"), Size = 40, Text = "",
+		panel[#panel+1] = Def.Text{ Font = RodinPath("m"), Size = FONT_S, Text = "",
 			Name = "SPFp" .. i,
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 500, rowY):zoom(0.3)
-				self:halign(1):shadowlength(1)
+				self:xy(-PANEL_W/2 + 500, rowY):zoom(FONT_ZOOM)
+				self:halign(1):shadowlength(0)
 			end,
 		}
 	end
