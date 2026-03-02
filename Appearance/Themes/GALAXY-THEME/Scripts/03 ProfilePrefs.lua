@@ -17,6 +17,7 @@ local Defaults = {
 	NoteSkin       = "",       -- empty = engine default
 	Accel          = 1,        -- index: 1=Normal 2=Boost 3=Brake 4=Wave
 	LaneCover      = 1,        -- index: 1=Off 2=Hidden+ 3=Sudden+ 4=HidSud+
+	CoverPercent   = 1,        -- index: 1=0% 2=5% … 11=50%
 	LaneVis        = 1,        -- index: 1=0% … 11=100% (0 = no darkening)
 	Guideline      = 1,        -- index: 1=Center 2=Border 3=Off
 	StepZone       = 1,        -- index: 1=On 2=Off
@@ -62,6 +63,7 @@ local function LoadGalaxySettings(pn, dir)
 	if sec.NoteSkin       then opts.NoteSkin       = tostring(sec.NoteSkin) end
 	if sec.Accel          then opts.Accel          = tonumber(sec.Accel)          or Defaults.Accel end
 	if sec.LaneCover      then opts.LaneCover      = tonumber(sec.LaneCover)      or Defaults.LaneCover end
+	if sec.CoverPercent   then opts.CoverPercent   = tonumber(sec.CoverPercent)   or Defaults.CoverPercent end
 	if sec.LaneVis        then opts.LaneVis        = tonumber(sec.LaneVis)        or Defaults.LaneVis end
 	if sec.Guideline      then opts.Guideline      = tonumber(sec.Guideline)      or Defaults.Guideline end
 	if sec.StepZone       then opts.StepZone       = tonumber(sec.StepZone)       or Defaults.StepZone end
@@ -93,6 +95,7 @@ local function SaveGalaxySettings(pn, dir)
 			NoteSkin       = opts.NoteSkin       or Defaults.NoteSkin,
 			Accel          = opts.Accel          or Defaults.Accel,
 			LaneCover      = opts.LaneCover      or Defaults.LaneCover,
+			CoverPercent   = opts.CoverPercent   or Defaults.CoverPercent,
 			LaneVis        = opts.LaneVis        or Defaults.LaneVis,
 			Guideline      = opts.Guideline      or Defaults.Guideline,
 			StepZone       = opts.StepZone       or Defaults.StepZone,

@@ -186,6 +186,13 @@ local LaneCoverChoices = {
 	{ label = "HidSud+",  value = "HidSud" },
 }
 
+local CoverPercentChoices = {}
+do
+	for i = 0, 50, 5 do
+		CoverPercentChoices[#CoverPercentChoices+1] = { label = i.."%", value = i }
+	end
+end
+
 local LaneVisChoices = {}
 do
 	for i = 0, 100, 10 do
@@ -224,7 +231,7 @@ local JudgePositionChoices = {
 	{ label = "Far",  value = "Far" },
 }
 
-local NUM_OPTION_ROWS = 15
+local NUM_OPTION_ROWS = 16
 
 -- Helper: find index in a choices array where c[field] == val
 local function FindChoiceIdx(choices, field, val, fallback)
@@ -273,6 +280,7 @@ local function BuildOptionRowsForPlayer(pn)
 
 	local accel    = opts.Accel          or 1
 	local cover    = opts.LaneCover      or 1
+	local coverPct = opts.CoverPercent   or 1
 	local vis      = opts.LaneVis        or 1
 	local guide    = opts.Guideline      or 1
 	local stepzone = opts.StepZone       or 1
@@ -290,6 +298,7 @@ local function BuildOptionRowsForPlayer(pn)
 		{ name = "NoteSkin",  choices = nsChoices,            selected = nsIdx },
 		{ name = "Accel",     choices = AccelChoices,         selected = math.max(1, math.min(accel, #AccelChoices)) },
 		{ name = "Cover",     choices = LaneCoverChoices,     selected = math.max(1, math.min(cover, #LaneCoverChoices)) },
+		{ name = "Cover %",   choices = CoverPercentChoices,  selected = math.max(1, math.min(coverPct, #CoverPercentChoices)) },
 		{ name = "Lane Vis",  choices = LaneVisChoices,       selected = math.max(1, math.min(vis, #LaneVisChoices)) },
 		{ name = "Guideline", choices = GuidelineChoices,     selected = math.max(1, math.min(guide, #GuidelineChoices)) },
 		{ name = "StepZone",  choices = StepZoneChoices,      selected = math.max(1, math.min(stepzone, #StepZoneChoices)) },
@@ -455,38 +464,33 @@ local function ApplyMenuOptions(pn)
 	end
 	GalaxyOptions[pn].Accel = rows[7].selected
 
-	-- Lane Cover (row 8): clear hidden/sudden, then apply selected
+	-- Lane Cover (row 8): save type (drawing handled in gameplay overlay)
 	GAMESTATE:ApplyPreferredModifiers(pn, "no hidden,no sudden")
-	local coverVal = LaneCoverChoices[rows[8].selected].value
-	if coverVal == "Hidden" then
-		GAMESTATE:ApplyPreferredModifiers(pn, "hidden")
-	elseif coverVal == "Sudden" then
-		GAMESTATE:ApplyPreferredModifiers(pn, "sudden")
-	elseif coverVal == "HidSud" then
-		GAMESTATE:ApplyPreferredModifiers(pn, "hidden,sudden")
-	end
 	GalaxyOptions[pn].LaneCover = rows[8].selected
 
-	-- Lane Visibility (row 9): theme-level setting for gameplay overlay
-	GalaxyOptions[pn].LaneVis = rows[9].selected
+	-- Cover % (row 9): save percentage index
+	GalaxyOptions[pn].CoverPercent = rows[9].selected
 
-	-- Guideline (row 10): theme-level setting
-	GalaxyOptions[pn].Guideline = rows[10].selected
+	-- Lane Visibility (row 10): theme-level setting for gameplay overlay
+	GalaxyOptions[pn].LaneVis = rows[10].selected
 
-	-- Step Zone (row 11): theme-level setting
-	GalaxyOptions[pn].StepZone = rows[11].selected
+	-- Guideline (row 11): theme-level setting
+	GalaxyOptions[pn].Guideline = rows[11].selected
 
-	-- Fast/Slow (row 12): theme-level setting
-	GalaxyOptions[pn].FastSlow = rows[12].selected
+	-- Step Zone (row 12): theme-level setting
+	GalaxyOptions[pn].StepZone = rows[12].selected
 
-	-- Combo Priority (row 13): theme-level setting
-	GalaxyOptions[pn].ComboPriority = rows[13].selected
+	-- Fast/Slow (row 13): theme-level setting
+	GalaxyOptions[pn].FastSlow = rows[13].selected
 
-	-- Judge Priority (row 14): theme-level setting
-	GalaxyOptions[pn].JudgePriority = rows[14].selected
+	-- Combo Priority (row 14): theme-level setting
+	GalaxyOptions[pn].ComboPriority = rows[14].selected
 
-	-- Judge Position (row 15): theme-level setting
-	GalaxyOptions[pn].JudgePosition = rows[15].selected
+	-- Judge Priority (row 15): theme-level setting
+	GalaxyOptions[pn].JudgePriority = rows[15].selected
+
+	-- Judge Position (row 16): theme-level setting
+	GalaxyOptions[pn].JudgePosition = rows[16].selected
 end
 
 local function RefreshMenu(pn)

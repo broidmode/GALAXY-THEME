@@ -85,6 +85,78 @@ t[#t+1] = Def.Actor{
 	end,
 }
 
+-- ===== COVER PERCENT LOOKUP =====
+-- CoverPercent index → actual percentage: 1=0%, 2=5%, 3=10%, … 11=50%
+local CoverPctValues = {}
+do
+	local idx = 1
+	for i = 0, 50, 5 do
+		CoverPctValues[idx] = i
+		idx = idx + 1
+	end
+end
+
+-- ===== LANE COVER QUADS (drawn ON TOP of notefield, behind HUD) =====
+-- Hidden+ = top cover, Sudden+ = bottom cover, HidSud+ = both.
+-- Cover % controls how much of the notefield height each cover takes.
+for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
+	local opts = GalaxyOptions[pn] or {}
+	local coverType = opts.LaneCover or 1        -- 1=Off 2=Hidden+ 3=Sudden+ 4=HidSud+
+	local pctIdx    = opts.CoverPercent or 1      -- index into CoverPctValues
+	local pct       = (CoverPctValues[pctIdx] or 0) / 100  -- 0.0 – 0.5
+
+	local style    = GAMESTATE:GetCurrentStyle(pn)
+	local numCols  = style:ColumnsPerPlayer()
+	local styleW   = style:GetWidth(pn)
+	local coverW   = styleW * (numCols / 1.7)    -- same width as lane filter
+	local coverH   = SCREEN_HEIGHT * pct
+
+	local needHidden = (coverType == 2 or coverType == 4)  -- Hidden+ or HidSud+
+	local needSudden = (coverType == 3 or coverType == 4)  -- Sudden+ or HidSud+
+
+	if needHidden and coverH > 0 then
+		t[#t+1] = Def.Quad{
+			Name = "CoverHidden_" .. ToEnumShortString(pn),
+			InitCommand = function(self)
+				self:zoomto(coverW, coverH)
+					:diffuse(color("#000000"))
+					:diffusealpha(1)
+					:visible(false)
+			end,
+			OnCommand = function(self)
+				local screen = SCREENMAN:GetTopScreen()
+				if not screen then return end
+				local playerActor = screen:GetChild("Player" .. ToEnumShortString(pn))
+				if not playerActor then return end
+				local px = playerActor:GetX()
+				-- Top cover: align top edge to top of screen
+				self:xy(px, coverH / 2):visible(true)
+			end,
+		}
+	end
+
+	if needSudden and coverH > 0 then
+		t[#t+1] = Def.Quad{
+			Name = "CoverSudden_" .. ToEnumShortString(pn),
+			InitCommand = function(self)
+				self:zoomto(coverW, coverH)
+					:diffuse(color("#000000"))
+					:diffusealpha(1)
+					:visible(false)
+			end,
+			OnCommand = function(self)
+				local screen = SCREENMAN:GetTopScreen()
+				if not screen then return end
+				local playerActor = screen:GetChild("Player" .. ToEnumShortString(pn))
+				if not playerActor then return end
+				local px = playerActor:GetX()
+				-- Bottom cover: align bottom edge to bottom of screen
+				self:xy(px, SCREEN_HEIGHT - coverH / 2):visible(true)
+			end,
+		}
+	end
+end
+
 -- ===== HUD ELEMENTS (per player) =====
 for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
 	local isP1 = (pn == PLAYER_1)
