@@ -130,14 +130,14 @@ local SpeedModes = {
 
 local XModValues = {}
 do
-	for v = 25, 800, 25 do  -- 0.25x to 8.00x in 0.25 increments (DDR-style)
+	for v = 5, 800, 5 do  -- 0.05x to 8.00x in 0.05 increments
 		XModValues[#XModValues+1] = { label = string.format("x%.2f", v/100), value = v/100 }
 	end
 end
 
 local BPMValues = {}  -- shared for CMod, MMod, Real Speed
 do
-	for v = 50, 1200, 25 do
+	for v = 50, 1200, 10 do
 		BPMValues[#BPMValues+1] = { label = tostring(v), value = v }
 	end
 end
