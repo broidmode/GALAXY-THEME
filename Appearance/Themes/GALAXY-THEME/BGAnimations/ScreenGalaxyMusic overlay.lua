@@ -71,6 +71,15 @@ local MenuRow      = {}    -- MenuRow[pn] = current row index
 local MenuFrame    = {}    -- MenuFrame[pn] = ActorFrame reference
 local PlayerOptionRows = {} -- PlayerOptionRows[pn] = { {name,choices,selected}, ... }
 
+-- Confirm-hold state: track Select/Start held + whether L/R was used
+local _confirmHeld = {}    -- _confirmHeld[pn] = true while Select/Start is held in menu
+local _confirmDirty = {}   -- _confirmDirty[pn] = true if L/R pressed during hold
+
+-- Fast-step sizes when confirm is held + L/R per row index (nil = normal step)
+local FAST_STEP = {
+	[2] = 10,  -- Speed: jump 10 choices per press
+}
+
 -- ===== DIFFICULTY PICKER STATE =====
 local DiffPickOpen = false
 local DiffPickIdx  = {}      -- DiffPickIdx[pn] = selected index in DiffSteps[]
@@ -517,6 +526,8 @@ local function CloseMenu(pn, apply)
 	end
 	MenuOpen[pn] = false
 	PlayerOptionRows[pn] = nil
+	_confirmHeld[pn] = false
+	_confirmDirty[pn] = false
 	if MenuFrame[pn] then MenuFrame[pn]:visible(false) end
 end
 
@@ -1178,7 +1189,17 @@ local function FindGroupEnd(idx)
 end
 
 local function InputHandler(event)
-	if event.type == "InputEventType_Release" then return false end
+	local isRelease = (event.type == "InputEventType_Release")
+	-- Allow release events through only for Select/Start when tracking a confirm-hold
+	if isRelease then
+		local pn = event.PlayerNumber
+		local btn = event.GameButton
+		if pn and _confirmHeld[pn] and (btn == "Select" or btn == "Start") then
+			-- fall through so the release logic below can fire
+		else
+			return false
+		end
+	end
 	if Accepted then return true end
 
 	local btn = event.GameButton
@@ -1193,8 +1214,17 @@ local function InputHandler(event)
 		if DiffPickOpen then return true end  -- block Select during diff pick
 		if not MenuOpen[pn] then
 			OpenMenu(pn)
+		elseif isRelease then
+			-- Release: close menu only if no L/R was pressed during hold
+			if not _confirmDirty[pn] then
+				CloseMenu(pn, true)
+			end
+			_confirmHeld[pn] = false
+			_confirmDirty[pn] = false
 		else
-			CloseMenu(pn, true)
+			-- First press while menu open: start tracking hold
+			_confirmHeld[pn] = true
+			_confirmDirty[pn] = false
 		end
 		return true
 	end
@@ -1236,24 +1266,57 @@ local function InputHandler(event)
 			RefreshMenu(pn)
 		elseif btn == "MenuLeft" then
 			local row = rows[MenuRow[pn]]
-			row.selected = row.selected - 1
-			if row.selected < 1 then row.selected = #row.choices end
+			local step = 1
+			if _confirmHeld[pn] then
+				_confirmDirty[pn] = true
+				step = FAST_STEP[MenuRow[pn]] or 1
+			end
+			row.selected = row.selected - step
+			if _confirmHeld[pn] then
+				-- Clamp when fast-stepping to avoid wrap-around
+				if row.selected < 1 then row.selected = 1 end
+			else
+				if row.selected < 1 then row.selected = #row.choices end
+			end
 			-- When Speed Mode changes, update Speed Value choices
 			if MenuRow[pn] == 1 then SyncSpeedValueChoices(pn) end
 			SfxSwitch:play()
 			RefreshMenu(pn)
 		elseif btn == "MenuRight" then
 			local row = rows[MenuRow[pn]]
-			row.selected = row.selected + 1
-			if row.selected > #row.choices then row.selected = 1 end
+			local step = 1
+			if _confirmHeld[pn] then
+				_confirmDirty[pn] = true
+				step = FAST_STEP[MenuRow[pn]] or 1
+			end
+			row.selected = row.selected + step
+			if _confirmHeld[pn] then
+				-- Clamp when fast-stepping to avoid wrap-around
+				if row.selected > #row.choices then row.selected = #row.choices end
+			else
+				if row.selected > #row.choices then row.selected = 1 end
+			end
 			-- When Speed Mode changes, update Speed Value choices
 			if MenuRow[pn] == 1 then SyncSpeedValueChoices(pn) end
 			SfxSwitch:play()
 			RefreshMenu(pn)
 		elseif btn == "Start" then
-			CloseMenu(pn, true)
+			if isRelease then
+				-- Release: close menu only if no L/R was pressed during hold
+				if not _confirmDirty[pn] then
+					CloseMenu(pn, true)
+				end
+				_confirmHeld[pn] = false
+				_confirmDirty[pn] = false
+			else
+				-- First press: start tracking hold
+				_confirmHeld[pn] = true
+				_confirmDirty[pn] = false
+			end
 		elseif btn == "Back" then
 			CloseMenu(pn, false)
+			_confirmHeld[pn] = false
+			_confirmDirty[pn] = false
 		end
 		return true  -- eat all input when this player's menu is open
 	end
