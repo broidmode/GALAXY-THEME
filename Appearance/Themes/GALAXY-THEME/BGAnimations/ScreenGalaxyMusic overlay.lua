@@ -9,12 +9,12 @@
 
 -- ===== CONSTANTS =====
 local COLS         = 3
-local CARD_W       = 160
-local CARD_H       = 190
-local COL_GAP      = 12
-local ROW_GAP      = 12
-local HEADER_H     = 44
-local POOL_CARDS   = 42    -- enough to fill screen + animation margin
+local CARD_W       = 240
+local CARD_H       = 285
+local COL_GAP      = 18
+local ROW_GAP      = 18
+local HEADER_H     = 66
+local POOL_CARDS   = 60    -- generous pool: ~15 visible + ~45 cached off-screen
 local POOL_HEADERS = 12
 
 local GRID_X       = SCREEN_CENTER_X
@@ -26,6 +26,11 @@ local totalRowH    = CARD_H + ROW_GAP
 -- How far above/below center we render (pixels)
 local RENDER_MARGIN = SCREEN_HEIGHT / 2 + CARD_H + 60
 
+-- Direction debounce: only load new images after 2 consecutive moves same direction
+local LastMoveDir  = 0     -- +1 = down/right, -1 = up/left, 0 = none
+local SameDirCount = 2     -- start at threshold so initial Refresh() loads cards
+local DEBOUNCE_THRESHOLD = 2  -- need this many same-dir moves before loading new cards
+
 -- ===== STATE =====
 local FlatList     = {}
 local Cursor       = 1
@@ -35,6 +40,10 @@ local Accepted     = false
 local CardPool     = {}
 local HeaderPool   = {}
 local GridFrame    = nil   -- reference to GridBrowser ActorFrame
+
+-- Pool assignment tracking: keeps cards stable so songs don't reload images
+local CardAssign   = {}    -- CardAssign[poolIdx] = flatIdx currently shown
+local CardByFlat   = {}    -- CardByFlat[flatIdx] = poolIdx (reverse lookup)
 
 -- ===== ANIMATION STATE =====
 local VisualOffset = 0     -- current pixel offset (ActorFrame y-shift)
@@ -806,39 +815,111 @@ local function Refresh(preItems)
 
 	local items = preItems or ComputeVisibleItems(RENDER_MARGIN + math.abs(VisualOffset))
 
-	-- Hide everything
-	for i = 1, POOL_CARDS do CardPool[i]:visible(false) end
-	for i = 1, POOL_HEADERS do HeaderPool[i]:visible(false) end
-
-	local ci = 1
-	local hi = 1
+	-- Collect which flatIdx values we need cards for, and where
+	local neededSongs = {}    -- { flatIdx -> {screenY, col, hasFocus} }
+	local neededHeaders = {}  -- sequential list for headers (no stable-pool needed)
 
 	for _, item in ipairs(items) do
-		local screenY = CENTER_Y + item.y
+		if item.type == "song" then
+			neededSongs[item.flatIdx] = {
+				screenY = CENTER_Y + item.y,
+				col = item.col,
+				hasFocus = (item.flatIdx == Cursor),
+			}
+		elseif item.type == "group" then
+			neededHeaders[#neededHeaders+1] = {
+				screenY = CENTER_Y + item.y,
+				flatIdx = item.flatIdx,
+			}
+		end
+	end
 
-		if item.type == "group" and hi <= POOL_HEADERS then
-			local a = HeaderPool[hi]
-			a:visible(true)
-			a:xy(GRID_X, screenY)
-			a:playcommand("SetHeader", {
-				Text = FlatList[item.flatIdx],
-				HasFocus = (item.flatIdx == Cursor),
-				IsOpen = (FlatList[item.flatIdx] == OpenGroup),
-			})
-			hi = hi + 1
-		elseif item.type == "song" and ci <= POOL_CARDS then
+	-- Phase 1: Hide off-screen cards but KEEP their pool assignment as cache
+	for ci = 1, POOL_CARDS do
+		local fi = CardAssign[ci]
+		if fi and not neededSongs[fi] then
+			CardPool[ci]:visible(false)
+			-- Don't clear CardAssign/CardByFlat — the image stays loaded in memory
+		end
+	end
+
+	-- Phase 2: Update already-assigned cards (just reposition + restyle, no image load)
+	for fi, info in pairs(neededSongs) do
+		local ci = CardByFlat[fi]
+		if ci then
 			local a = CardPool[ci]
 			a:visible(true)
-			local xOff = (item.col - 2) * totalColW
-			a:xy(GRID_X + xOff, screenY)
-			local entry = FlatList[item.flatIdx]
+			local xOff = (info.col - 2) * totalColW
+			a:xy(GRID_X + xOff, info.screenY)
+			local entry = FlatList[fi]
 			a:playcommand("SetCard", {
 				Song = entry[1],
 				Steps = entry[2],
-				HasFocus = (item.flatIdx == Cursor),
+				HasFocus = info.hasFocus,
 			})
-			ci = ci + 1
 		end
+	end
+
+	-- Phase 3: Assign cards to newly visible songs that aren't cached
+	-- Only load new images if we've moved consistently in one direction
+	-- (debounce prevents stutter when user bounces up/down)
+	local allowNewLoads = (SameDirCount >= DEBOUNCE_THRESHOLD)
+
+	for fi, info in pairs(neededSongs) do
+		if not CardByFlat[fi] then
+			if not allowNewLoads then
+				-- Skip loading — card stays invisible until debounce clears
+			else
+				-- First try a truly free (unassigned) pool slot
+				local ci = nil
+				for k = 1, POOL_CARDS do
+					if not CardAssign[k] then
+						ci = k
+						break
+					end
+				end
+				-- No free slot — evict an off-screen cached card
+				if not ci then
+					for k = 1, POOL_CARDS do
+						local cachedFi = CardAssign[k]
+						if cachedFi and not neededSongs[cachedFi] then
+							CardByFlat[cachedFi] = nil
+							CardAssign[k] = nil
+							ci = k
+							break
+						end
+					end
+				end
+				if not ci then break end  -- pool exhausted (shouldn't happen)
+
+				CardAssign[ci] = fi
+				CardByFlat[fi] = ci
+				local a = CardPool[ci]
+				a:visible(true)
+				local xOff = (info.col - 2) * totalColW
+				a:xy(GRID_X + xOff, info.screenY)
+				local entry = FlatList[fi]
+				a:playcommand("SetCard", {
+					Song = entry[1],
+					Steps = entry[2],
+					HasFocus = info.hasFocus,
+				})
+			end
+		end
+	end
+
+	-- Headers: simple sequential assignment (cheap, no images)
+	for i = 1, POOL_HEADERS do HeaderPool[i]:visible(false) end
+	for i, hdr in ipairs(neededHeaders) do
+		if i > POOL_HEADERS then break end
+		local a = HeaderPool[i]
+		a:visible(true)
+		a:xy(GRID_X, hdr.screenY)
+		a:playcommand("SetHeader", {
+			Text = FlatList[hdr.flatIdx],
+			HasFocus = (hdr.flatIdx == Cursor),
+			IsOpen = (FlatList[hdr.flatIdx] == OpenGroup),
+		})
 	end
 end
 
@@ -851,6 +932,15 @@ local function MoveCursor(delta)
 		GAMESTATE:SetCurrentSong(FlatList[Cursor][1])
 	end
 	SOUND:PlayOnce(THEME:GetPathS("","_switch down"))
+
+	-- Track direction for debounce
+	local dir = (delta > 0) and 1 or -1
+	if dir == LastMoveDir then
+		SameDirCount = SameDirCount + 1
+	else
+		LastMoveDir = dir
+		SameDirCount = 1
+	end
 
 	-- Compute layout with extended margin for animation headroom
 	local extMargin = RENDER_MARGIN + math.abs(VisualOffset) + 400
@@ -894,6 +984,15 @@ local function ToggleGroup()
 		OpenGroup = grp
 	end
 	FlatList = BuildFlatList()
+	-- Reset pool assignments since flatIdx mapping changed
+	for ci = 1, POOL_CARDS do
+		CardPool[ci]:visible(false)
+		CardAssign[ci] = nil
+	end
+	CardByFlat = {}
+	-- Reset debounce so the fresh list loads immediately
+	LastMoveDir = 0
+	SameDirCount = DEBOUNCE_THRESHOLD
 	for i = 1, #FlatList do
 		if IsGroup(i) and FlatList[i] == grp then
 			Cursor = i
@@ -1106,17 +1205,14 @@ end
 -- ===== ACTOR FACTORIES =====
 
 local function MakeSongCard(name)
+	local _loadedSongDir = nil   -- track which song is loaded on this card
 	return Def.ActorFrame{
 		Name = name,
 		InitCommand = function(self) self:visible(false) end,
 		SetCardCommand = function(self, params)
 			self:GetChild("Border"):visible(params.HasFocus)
 			self:GetChild("BG"):diffuse(params.HasFocus and color("#333333") or color("#1a1a1a"))
-			local jacket = self:GetChild("Jacket")
-			if params.Song then
-				jacket:LoadFromCached("Jacket", GetJacketPath(params.Song))
-			end
-			jacket:setsize(CARD_W - 16, CARD_W - 16)
+
 			local title = self:GetChild("Title")
 			if params.Song then
 				title:settext(params.Song:GetDisplayMainTitle())
@@ -1124,6 +1220,19 @@ local function MakeSongCard(name)
 				title:settext("")
 			end
 			title:diffuse(params.HasFocus and Color.White or color("#888888"))
+
+			-- Only reload the jacket if the song actually changed
+			local songDir = params.Song and params.Song:GetSongDir() or nil
+			if songDir ~= _loadedSongDir then
+				_loadedSongDir = songDir
+				local jacket = self:GetChild("Jacket")
+				if params.Song then
+					local path = GetJacketPath(params.Song)
+					jacket:Load(path)
+				end
+				local targetSz = CARD_W - 16
+				jacket:scaletoclipped(targetSz, targetSz)
+			end
 		end,
 
 		Def.Quad{
@@ -1140,12 +1249,12 @@ local function MakeSongCard(name)
 		},
 		Def.Sprite{
 			Name = "Jacket",
-			InitCommand = function(self) self:y(-18) end,
+			InitCommand = function(self) self:y(-27) end,
 		},
 		LoadFont("Common Normal") .. {
 			Name = "Title",
 			InitCommand = function(self)
-				self:y(CARD_H/2 - 24):zoom(0.55):maxwidth(CARD_W/0.55 - 20):shadowlength(1)
+				self:y(CARD_H/2 - 36):zoom(0.8):maxwidth(CARD_W/0.8 - 20):shadowlength(1)
 			end,
 		},
 	}
@@ -1182,13 +1291,13 @@ local function MakeGroupHeader(name)
 		LoadFont("Common Normal") .. {
 			Name = "Text",
 			InitCommand = function(self)
-				self:zoom(0.65):maxwidth((COLS * totalColW - 60) / 0.65):shadowlength(1)
+				self:zoom(0.9):maxwidth((COLS * totalColW - 60) / 0.9):shadowlength(1)
 			end,
 		},
 		LoadFont("Common Normal") .. {
 			Name = "Arrow",
 			InitCommand = function(self)
-				self:x((COLS * totalColW) / 2 - 20):zoom(0.6)
+				self:x((COLS * totalColW) / 2 - 20):zoom(0.85)
 			end,
 		},
 	}
@@ -1277,7 +1386,7 @@ local function MakeMenu(pn)
 					if eMin == eMax then
 						preview:settext(eMin .. " BPM")
 					else
-						preview:settext(eMin .. " / " .. eMode .. " / " .. eMax)
+						preview:settext(eMin .. " - " .. eMode .. " - " .. eMax)
 					end
 				end
 			end
@@ -1642,25 +1751,35 @@ end
 outer[#outer+1] = MakeDiffPicker(PLAYER_1)
 outer[#outer+1] = MakeDiffPicker(PLAYER_2)
 
--- ===== SONG INFO PANEL =====
--- Displays song name, artist, and BPM breakdown to the left of the grid.
-local INFO_X = 80   -- left-aligned
-local INFO_Y = SCREEN_CENTER_Y - 40
+-- ===== SONG INFO BAR =====
+-- Displays jacket, title, artist, BPM in a centered bar at the top of the screen.
+local INFO_BAR_W = 850
+local INFO_BAR_H = 80
+local INFO_BAR_Y = 55
 
 local infoPanel = Def.ActorFrame{
 	Name = "SongInfoPanel",
 	InitCommand = function(self)
 		InfoFrame = self
+		self:xy(SCREEN_CENTER_X, INFO_BAR_Y)
 	end,
 	SetSongCommand = function(self, params)
 		local song = params.Song
 		local title  = self:GetChild("InfoTitle")
 		local artist = self:GetChild("InfoArtist")
 		local bpmText= self:GetChild("InfoBPM")
+		local jacket = self:GetChild("InfoJacket")
+		local bg     = self:GetChild("InfoBG")
+		local border = self:GetChild("InfoBorder")
 
 		if song then
+			bg:visible(true)
+			border:visible(true)
 			title:settext(song:GetDisplayMainTitle()):visible(true)
 			artist:settext(song:GetDisplayArtist()):visible(true)
+			jacket:Load(GetJacketPath(song))
+			jacket:scaletoclipped(60, 60)
+			jacket:visible(true)
 
 			-- BPM breakdown: [Min - Mode - Max]
 			local bpms = song:GetDisplayBpms()
@@ -1676,22 +1795,48 @@ local infoPanel = Def.ActorFrame{
 			if minBPM == maxBPM then
 				bpmText:settext(tostring(minBPM) .. " BPM"):visible(true)
 			else
-				bpmText:settext(minBPM .. " / " .. modeBPM .. " / " .. maxBPM .. " BPM"):visible(true)
+				bpmText:settext(minBPM .. " - " .. modeBPM .. " - " .. maxBPM .. " BPM"):visible(true)
 			end
 		else
+			bg:visible(false)
+			border:visible(false)
 			title:settext(""):visible(false)
 			artist:settext(""):visible(false)
 			bpmText:settext(""):visible(false)
+			jacket:visible(false)
 		end
 	end,
 
+	-- Border
+	Def.Quad{
+		Name = "InfoBorder",
+		InitCommand = function(self)
+			self:zoomto(INFO_BAR_W + 2, INFO_BAR_H + 2)
+				:diffuse(color("#334466")):diffusealpha(0.5):visible(false)
+		end,
+	},
+	-- Background
+	Def.Quad{
+		Name = "InfoBG",
+		InitCommand = function(self)
+			self:zoomto(INFO_BAR_W, INFO_BAR_H)
+				:diffuse(color("#0a0a18")):diffusealpha(0.92):visible(false)
+		end,
+	},
+	-- Jacket
+	Def.Sprite{
+		Name = "InfoJacket",
+		InitCommand = function(self)
+			self:x(-INFO_BAR_W/2 + 42):visible(false)
+		end,
+	},
 	-- Song title
 	LoadFont("Common Normal") .. {
 		Name = "InfoTitle",
 		InitCommand = function(self)
-			self:xy(INFO_X, INFO_Y)
-				:zoom(0.7):halign(0):valign(1)
-				:maxwidth(280/0.7)
+			self:xy(-INFO_BAR_W/2 + 82, -12)
+				:zoom(0.75):halign(0):valign(0.5)
+				:maxwidth((INFO_BAR_W - 130)/0.75)
 				:diffuse(Color.White):shadowlength(1)
 				:visible(false)
 		end,
@@ -1700,9 +1845,9 @@ local infoPanel = Def.ActorFrame{
 	LoadFont("Common Normal") .. {
 		Name = "InfoArtist",
 		InitCommand = function(self)
-			self:xy(INFO_X, INFO_Y + 22)
-				:zoom(0.5):halign(0):valign(1)
-				:maxwidth(280/0.5)
+			self:xy(-INFO_BAR_W/2 + 82, 12)
+				:zoom(0.5):halign(0):valign(0.5)
+				:maxwidth((INFO_BAR_W - 130)/0.5)
 				:diffuse(color("#aaaaaa")):shadowlength(1)
 				:visible(false)
 		end,
@@ -1711,9 +1856,8 @@ local infoPanel = Def.ActorFrame{
 	LoadFont("Common Normal") .. {
 		Name = "InfoBPM",
 		InitCommand = function(self)
-			self:xy(INFO_X, INFO_Y + 46)
-				:zoom(0.5):halign(0):valign(1)
-				:maxwidth(280/0.5)
+			self:xy(INFO_BAR_W/2 - 15, 0)
+				:zoom(0.55):halign(1):valign(0.5)
 				:diffuse(color("#66aaff")):shadowlength(1)
 				:visible(false)
 		end,
@@ -1763,10 +1907,10 @@ outer[#outer+1] = Def.Actor{
 -- P1 left, P2 right. Rows grayed out if difficulty doesn't exist.
 -- Columns: Diff | Meter | Grade | Score | Lamp | EX Raw | EX% | Flare | FP
 
-local PANEL_W     = 355
-local PANEL_H     = 200
-local PANEL_ROW_H = 30
-local PANEL_Y     = SCREEN_CENTER_Y + 230
+local PANEL_W     = 520
+local PANEL_H     = 400
+local PANEL_ROW_H = 60
+local PANEL_Y     = SCREEN_CENTER_Y
 local PANEL_DIFFS = {
 	"Difficulty_Beginner",
 	"Difficulty_Easy",
@@ -1809,9 +1953,9 @@ local function MakeScorePanel(pn)
 	local isVersus = GAMESTATE:GetNumPlayersEnabled() > 1
 	local panelX
 	if isVersus then
-		panelX = (pn == PLAYER_1) and 190 or (SCREEN_WIDTH - 190)
+		panelX = (pn == PLAYER_1) and 275 or (SCREEN_WIDTH - 275)
 	else
-		panelX = 190
+		panelX = 275
 	end
 
 	local pnShort = ToEnumShortString(pn)
@@ -1986,62 +2130,62 @@ local function MakeScorePanel(pn)
 		-- Column headers
 		LoadFont("Common Normal") .. {
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 8, -PANEL_H/2 + 10):zoom(0.35):halign(0)
+				self:xy(-PANEL_W/2 + 12, -PANEL_H/2 + 12):zoom(0.45):halign(0)
 					:settext("DIFF"):diffuse(color("#667788"))
 			end,
 		},
 		LoadFont("Common Normal") .. {
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 44, -PANEL_H/2 + 10):zoom(0.35):halign(0.5)
+				self:xy(-PANEL_W/2 + 65, -PANEL_H/2 + 12):zoom(0.45):halign(0.5)
 					:settext("LV"):diffuse(color("#667788"))
 			end,
 		},
 		LoadFont("Common Normal") .. {
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 68, -PANEL_H/2 + 10):zoom(0.35):halign(0.5)
+				self:xy(-PANEL_W/2 + 100, -PANEL_H/2 + 12):zoom(0.45):halign(0.5)
 					:settext("GRD"):diffuse(color("#667788"))
 			end,
 		},
 		LoadFont("Common Normal") .. {
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 126, -PANEL_H/2 + 10):zoom(0.35):halign(1)
+				self:xy(-PANEL_W/2 + 185, -PANEL_H/2 + 12):zoom(0.45):halign(1)
 					:settext("SCORE"):diffuse(color("#667788"))
 			end,
 		},
 		LoadFont("Common Normal") .. {
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 160, -PANEL_H/2 + 10):zoom(0.35):halign(0.5)
+				self:xy(-PANEL_W/2 + 235, -PANEL_H/2 + 12):zoom(0.45):halign(0.5)
 					:settext("LAMP"):diffuse(color("#667788"))
 			end,
 		},
 		LoadFont("Common Normal") .. {
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 210, -PANEL_H/2 + 10):zoom(0.35):halign(1)
+				self:xy(-PANEL_W/2 + 310, -PANEL_H/2 + 12):zoom(0.45):halign(1)
 					:settext("EX"):diffuse(color("#667788"))
 			end,
 		},
 		LoadFont("Common Normal") .. {
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 255, -PANEL_H/2 + 10):zoom(0.35):halign(1)
+				self:xy(-PANEL_W/2 + 375, -PANEL_H/2 + 12):zoom(0.45):halign(1)
 					:settext("EX%"):diffuse(color("#667788"))
 			end,
 		},
 		LoadFont("Common Normal") .. {
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 295, -PANEL_H/2 + 10):zoom(0.35):halign(0.5)
+				self:xy(-PANEL_W/2 + 435, -PANEL_H/2 + 12):zoom(0.45):halign(0.5)
 					:settext("FLARE"):diffuse(color("#667788"))
 			end,
 		},
 		LoadFont("Common Normal") .. {
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 340, -PANEL_H/2 + 10):zoom(0.35):halign(1)
+				self:xy(-PANEL_W/2 + 500, -PANEL_H/2 + 12):zoom(0.45):halign(1)
 					:settext("FP"):diffuse(color("#667788"))
 			end,
 		},
 	}
 
 	-- Build 5 difficulty rows
-	local rowStartY = -PANEL_H/2 + 28
+	local rowStartY = -PANEL_H/2 + 35
 	for i = 1, 5 do
 		local rowY = rowStartY + (i - 1) * PANEL_ROW_H + PANEL_ROW_H/2
 
@@ -2049,70 +2193,70 @@ local function MakeScorePanel(pn)
 		panel[#panel+1] = Def.Quad{
 			Name = "SPRowBG" .. i,
 			InitCommand = function(self)
-				self:y(rowY):zoomto(PANEL_W - 4, PANEL_ROW_H - 2):diffusealpha(0)
+				self:y(rowY):zoomto(PANEL_W - 6, PANEL_ROW_H - 4):diffusealpha(0)
 			end,
 		}
 		-- Difficulty label
 		panel[#panel+1] = LoadFont("Common Normal") .. {
 			Name = "SPDiff" .. i,
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 8, rowY):zoom(0.4):halign(0):shadowlength(1)
+				self:xy(-PANEL_W/2 + 12, rowY):zoom(0.55):halign(0):shadowlength(1)
 			end,
 		}
 		-- Meter
 		panel[#panel+1] = LoadFont("Common Normal") .. {
 			Name = "SPMeter" .. i,
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 44, rowY):zoom(0.45):halign(0.5):shadowlength(1)
+				self:xy(-PANEL_W/2 + 65, rowY):zoom(0.6):halign(0.5):shadowlength(1)
 			end,
 		}
 		-- Grade
 		panel[#panel+1] = LoadFont("Common Normal") .. {
 			Name = "SPGrade" .. i,
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 68, rowY):zoom(0.4):halign(0.5):shadowlength(1)
+				self:xy(-PANEL_W/2 + 100, rowY):zoom(0.55):halign(0.5):shadowlength(1)
 			end,
 		}
 		-- Score
 		panel[#panel+1] = LoadFont("Common Normal") .. {
 			Name = "SPScore" .. i,
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 126, rowY):zoom(0.38):halign(1):shadowlength(1)
+				self:xy(-PANEL_W/2 + 185, rowY):zoom(0.5):halign(1):shadowlength(1)
 			end,
 		}
 		-- Combo Lamp
 		panel[#panel+1] = LoadFont("Common Normal") .. {
 			Name = "SPLamp" .. i,
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 160, rowY):zoom(0.35):halign(0.5):shadowlength(1)
+				self:xy(-PANEL_W/2 + 235, rowY):zoom(0.48):halign(0.5):shadowlength(1)
 			end,
 		}
 		-- EX Raw
 		panel[#panel+1] = LoadFont("Common Normal") .. {
 			Name = "SPExRaw" .. i,
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 210, rowY):zoom(0.35):halign(1):shadowlength(1)
+				self:xy(-PANEL_W/2 + 310, rowY):zoom(0.48):halign(1):shadowlength(1)
 			end,
 		}
 		-- EX %
 		panel[#panel+1] = LoadFont("Common Normal") .. {
 			Name = "SPExPct" .. i,
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 255, rowY):zoom(0.35):halign(1):shadowlength(1)
+				self:xy(-PANEL_W/2 + 375, rowY):zoom(0.48):halign(1):shadowlength(1)
 			end,
 		}
 		-- Flare Grade
 		panel[#panel+1] = LoadFont("Common Normal") .. {
 			Name = "SPFlare" .. i,
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 295, rowY):zoom(0.38):halign(0.5):shadowlength(1)
+				self:xy(-PANEL_W/2 + 435, rowY):zoom(0.5):halign(0.5):shadowlength(1)
 			end,
 		}
 		-- Flare Points
 		panel[#panel+1] = LoadFont("Common Normal") .. {
 			Name = "SPFp" .. i,
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 340, rowY):zoom(0.35):halign(1):shadowlength(1)
+				self:xy(-PANEL_W/2 + 500, rowY):zoom(0.48):halign(1):shadowlength(1)
 			end,
 		}
 	end
