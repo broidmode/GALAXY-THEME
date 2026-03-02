@@ -10,7 +10,8 @@ local SECTION = "GALAXY"
 -- Default values for new profiles / guests
 local Defaults = {
 	SpeedMode      = "Real",
-	SpeedValue     = 200,
+	SpeedValue     = 200,      -- BPM value for Real/CMod/MMod
+	SpeedRate      = 100,      -- XMod rate *100 (100 = x1.00)
 	Turn           = 1,
 	Scroll         = 1,
 	Gauge          = "Normal",
@@ -57,6 +58,7 @@ local function LoadGalaxySettings(pn, dir)
 	local opts = GalaxyOptions[pn]
 	if sec.SpeedMode  then opts.SpeedMode  = tostring(sec.SpeedMode) end
 	if sec.SpeedValue then opts.SpeedValue = tonumber(sec.SpeedValue) or Defaults.SpeedValue end
+	if sec.SpeedRate  then opts.SpeedRate  = tonumber(sec.SpeedRate)  or Defaults.SpeedRate end
 	if sec.Turn       then opts.Turn       = tonumber(sec.Turn) or Defaults.Turn end
 	if sec.Scroll     then opts.Scroll     = tonumber(sec.Scroll) or Defaults.Scroll end
 	if sec.Gauge      then opts.Gauge      = tostring(sec.Gauge) end
@@ -89,6 +91,7 @@ local function SaveGalaxySettings(pn, dir)
 		[SECTION] = {
 			SpeedMode      = opts.SpeedMode      or Defaults.SpeedMode,
 			SpeedValue     = opts.SpeedValue     or Defaults.SpeedValue,
+			SpeedRate      = opts.SpeedRate      or Defaults.SpeedRate,
 			Turn           = opts.Turn           or Defaults.Turn,
 			Scroll         = opts.Scroll         or Defaults.Scroll,
 			Gauge          = opts.Gauge          or Defaults.Gauge,

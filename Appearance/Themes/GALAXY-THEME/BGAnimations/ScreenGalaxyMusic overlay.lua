@@ -77,7 +77,14 @@ local _confirmDirty = {}   -- _confirmDirty[pn] = true if L/R pressed during hol
 
 -- Fast-step sizes when confirm is held + L/R per row index (nil = normal step)
 local FAST_STEP = {
-	[2] = 10,  -- Speed: jump 10 choices per press
+	[2] = 10,  -- Speed: jump 10 choices per press (100 BPM or x0.50)
+}
+
+-- Special fast-jump targets for specific rows (by row index)
+-- When confirm-held, L jumps to first target, R jumps to second target
+-- These are looked up by value field in the row's choices
+local FAST_JUMP = {
+	[5] = { left = "Normal", right = "Risky" },  -- Gauge: L=Normal, R=Risky
 }
 
 -- ===== DIFFICULTY PICKER STATE =====
@@ -131,22 +138,22 @@ GalaxyCursorState = GalaxyCursorState or {}
 -- ===== SIDE MENU OPTION DEFINITIONS =====
 
 local SpeedModes = {
-	{ label = "XMod",  value = "XMod" },
-	{ label = "CMod",  value = "CMod" },
-	{ label = "MMod",  value = "MMod" },
-	{ label = "Real",  value = "Real" },
+	{ label = "Real",        value = "Real" },
+	{ label = "Speed Rate",  value = "XMod" },
+	{ label = "MMod",        value = "MMod" },
+	{ label = "CMod",        value = "CMod" },
 }
 
 local XModValues = {}
 do
-	for v = 5, 800, 5 do  -- 0.05x to 8.00x in 0.05 increments
+	for v = 25, 800, 5 do  -- x0.25 to x8.00 in 0.05 increments
 		XModValues[#XModValues+1] = { label = string.format("x%.2f", v/100), value = v/100 }
 	end
 end
 
 local BPMValues = {}  -- shared for CMod, MMod, Real Speed
 do
-	for v = 50, 1200, 10 do
+	for v = 10, 1000, 10 do
 		BPMValues[#BPMValues+1] = { label = tostring(v), value = v }
 	end
 end
@@ -264,14 +271,21 @@ end
 local function BuildOptionRowsForPlayer(pn)
 	local opts = GalaxyOptions[pn] or {}
 	local mode  = opts.SpeedMode  or "Real"
-	local speed = opts.SpeedValue or 500
+	local bpm   = opts.SpeedValue or 200
+	local rate  = (opts.SpeedRate or 100) / 100  -- stored as int*100, convert to float
 	local turn  = opts.Turn       or 1
 	local scroll= opts.Scroll     or 1
 	local gauge = opts.Gauge      or "Normal"
 
 	local modeIdx  = FindChoiceIdx(SpeedModes, "value", mode, 4)
-	local speedChoices = (mode == "XMod") and XModValues or BPMValues
-	local speedIdx = FindClosestIdx(speedChoices, speed)
+	local speedChoices, speedIdx
+	if mode == "XMod" then
+		speedChoices = XModValues
+		speedIdx = FindClosestIdx(speedChoices, rate)
+	else
+		speedChoices = BPMValues
+		speedIdx = FindClosestIdx(speedChoices, bpm)
+	end
 	local gaugeIdx = FindChoiceIdx(GaugeChoices, "value", gauge, 1)
 
 	-- NoteSkin: build choices dynamically from engine
@@ -318,23 +332,54 @@ local function BuildOptionRowsForPlayer(pn)
 	}
 end
 
--- Swap Speed Value row choices based on current Speed Mode (per-player)
+-- Save the current speed row value to GalaxyOptions immediately.
+-- Called whenever the speed value (row 2) or mode (row 1) changes.
+local function SaveSpeedValueNow(pn)
+	local rows = PlayerOptionRows[pn]
+	if not rows then return end
+	local mode = SpeedModes[rows[1].selected].value
+	local val  = rows[2].choices[rows[2].selected]
+	if not val then return end
+	if mode == "XMod" then
+		GalaxyOptions[pn].SpeedRate = math.floor(val.value * 100 + 0.5)
+	else
+		GalaxyOptions[pn].SpeedValue = val.value
+	end
+end
+
+-- Swap Speed Value row choices based on current Speed Mode (per-player).
+-- Saves the current value first, then restores the saved value for the new mode.
 local function SyncSpeedValueChoices(pn)
 	local rows = PlayerOptionRows[pn]
 	if not rows then return end
-	local modeRow = rows[1]
 	local valRow  = rows[2]
-	local mode = SpeedModes[modeRow.selected].value
-	local oldVal = valRow.choices[valRow.selected] and valRow.choices[valRow.selected].value
+
+	-- Determine OLD mode from the choices still on the row (not from row 1,
+	-- which has already been updated to the new mode by the input handler).
+	local oldVal = valRow.choices[valRow.selected]
+	if oldVal then
+		if valRow.choices == XModValues then
+			-- Was XMod — save rate
+			GalaxyOptions[pn].SpeedRate = math.floor(oldVal.value * 100 + 0.5)
+		else
+			-- Was BPM mode — save BPM
+			GalaxyOptions[pn].SpeedValue = oldVal.value
+		end
+	end
+
+	-- Now switch to the new mode's choices and restore saved value
+	local mode = SpeedModes[rows[1].selected].value
+	local opts = GalaxyOptions[pn] or {}
 	if mode == "XMod" then
 		valRow.choices = XModValues
+		-- Restore saved rate (stored as int*100)
+		local savedRate = (opts.SpeedRate or 100) / 100
+		valRow.selected = FindClosestIdx(valRow.choices, savedRate)
 	else
 		valRow.choices = BPMValues
-	end
-	if oldVal then
-		valRow.selected = FindClosestIdx(valRow.choices, oldVal)
-	else
-		valRow.selected = 1
+		-- Restore saved BPM
+		local savedBPM = opts.SpeedValue or 200
+		valRow.selected = FindClosestIdx(valRow.choices, savedBPM)
 	end
 end
 
@@ -385,15 +430,18 @@ end
 local function ApplySpeedMod(pn)
 	local opts = GalaxyOptions[pn]
 	local mode = opts.SpeedMode or "XMod"
-	local val  = opts.SpeedValue or 2.0
 
 	if mode == "XMod" then
-		GAMESTATE:ApplyPreferredModifiers(pn, string.format("%.2fx", val))
+		local rate = (opts.SpeedRate or 100) / 100  -- stored as int*100
+		GAMESTATE:ApplyPreferredModifiers(pn, string.format("%.2fx", rate))
 	elseif mode == "CMod" then
+		local val = opts.SpeedValue or 200
 		GAMESTATE:ApplyPreferredModifiers(pn, string.format("C%d", val))
 	elseif mode == "MMod" then
+		local val = opts.SpeedValue or 200
 		GAMESTATE:ApplyPreferredModifiers(pn, string.format("M%d", val))
 	elseif mode == "Real" then
+		local val = opts.SpeedValue or 200
 		-- Compute the largest 0.05-increment XMod where dominantBPM * mult < targetBPM
 		local song = GAMESTATE:GetCurrentSong()
 		if song then
@@ -430,11 +478,10 @@ local function ApplyMenuOptions(pn)
 	local rows = PlayerOptionRows[pn]
 	if not rows then return end
 
-	-- Speed: store mode/value in GalaxyOptions, then apply
+	-- Speed: store mode + value in GalaxyOptions, then apply
 	local mode = SpeedModes[rows[1].selected].value
-	local val  = rows[2].choices[rows[2].selected].value
-	GalaxyOptions[pn].SpeedMode  = mode
-	GalaxyOptions[pn].SpeedValue = val
+	GalaxyOptions[pn].SpeedMode = mode
+	SaveSpeedValueNow(pn)
 	ApplySpeedMod(pn)
 
 	-- Turn: clear all, then apply
@@ -1265,39 +1312,51 @@ local function InputHandler(event)
 			SfxSwitch:play()
 			RefreshMenu(pn)
 		elseif btn == "MenuLeft" then
-			local row = rows[MenuRow[pn]]
-			local step = 1
+			local rowIdx = MenuRow[pn]
+			local row = rows[rowIdx]
 			if _confirmHeld[pn] then
 				_confirmDirty[pn] = true
-				step = FAST_STEP[MenuRow[pn]] or 1
-			end
-			row.selected = row.selected - step
-			if _confirmHeld[pn] then
-				-- Clamp when fast-stepping to avoid wrap-around
-				if row.selected < 1 then row.selected = 1 end
+				-- Check for a jump target first
+				local jump = FAST_JUMP[rowIdx]
+				if jump and jump.left then
+					local jIdx = FindChoiceIdx(row.choices, "value", jump.left, nil)
+					if jIdx then row.selected = jIdx end
+				else
+					local step = FAST_STEP[rowIdx] or 1
+					row.selected = math.max(1, row.selected - step)
+				end
 			else
-				if row.selected < 1 then row.selected = #row.choices end
+				-- Normal step, clamp at minimum (no cycling)
+				row.selected = math.max(1, row.selected - 1)
 			end
 			-- When Speed Mode changes, update Speed Value choices
-			if MenuRow[pn] == 1 then SyncSpeedValueChoices(pn) end
+			if rowIdx == 1 then SyncSpeedValueChoices(pn) end
+			-- Immediately persist speed value when row 2 changes
+			if rowIdx == 2 then SaveSpeedValueNow(pn) end
 			SfxSwitch:play()
 			RefreshMenu(pn)
 		elseif btn == "MenuRight" then
-			local row = rows[MenuRow[pn]]
-			local step = 1
+			local rowIdx = MenuRow[pn]
+			local row = rows[rowIdx]
 			if _confirmHeld[pn] then
 				_confirmDirty[pn] = true
-				step = FAST_STEP[MenuRow[pn]] or 1
-			end
-			row.selected = row.selected + step
-			if _confirmHeld[pn] then
-				-- Clamp when fast-stepping to avoid wrap-around
-				if row.selected > #row.choices then row.selected = #row.choices end
+				-- Check for a jump target first
+				local jump = FAST_JUMP[rowIdx]
+				if jump and jump.right then
+					local jIdx = FindChoiceIdx(row.choices, "value", jump.right, nil)
+					if jIdx then row.selected = jIdx end
+				else
+					local step = FAST_STEP[rowIdx] or 1
+					row.selected = math.min(#row.choices, row.selected + step)
+				end
 			else
-				if row.selected > #row.choices then row.selected = 1 end
+				-- Normal step, clamp at maximum (no cycling)
+				row.selected = math.min(#row.choices, row.selected + 1)
 			end
 			-- When Speed Mode changes, update Speed Value choices
-			if MenuRow[pn] == 1 then SyncSpeedValueChoices(pn) end
+			if rowIdx == 1 then SyncSpeedValueChoices(pn) end
+			-- Immediately persist speed value when row 2 changes
+			if rowIdx == 2 then SaveSpeedValueNow(pn) end
 			SfxSwitch:play()
 			RefreshMenu(pn)
 		elseif btn == "Start" then
