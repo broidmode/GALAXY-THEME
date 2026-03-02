@@ -73,7 +73,7 @@ local function T(p)
 	return Def.Text{
 		Font = RodinPath("db"),
 		Size = p.size or FontS("db"),
-		Text = "",
+		Text = p.text or "",
 		InitCommand = function(self)
 			self:xy(p.x or 0, p.y or 0)
 				:zoom(FONT_ZOOM)
@@ -82,7 +82,6 @@ local function T(p)
 				:shadowlength(0)
 				:SetTextureFiltering(false)
 			if p.maxwidth then self:maxwidth(FontMaxWidth(p.maxwidth)) end
-			self:settext(p.text or "")
 		end,
 	}
 end
