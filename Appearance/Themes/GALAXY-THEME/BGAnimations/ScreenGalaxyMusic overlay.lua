@@ -45,6 +45,10 @@ local GridFrame    = nil   -- reference to GridBrowser ActorFrame
 local CardAssign   = {}    -- CardAssign[poolIdx] = flatIdx currently shown
 local CardByFlat   = {}    -- CardByFlat[flatIdx] = poolIdx (reverse lookup)
 
+-- Deferred jacket loading: when a Refresh caps at MAX_LOADS_PER_FRAME,
+-- this flag tells the per-frame update to schedule another Refresh pass.
+local DeferredLoadPending = false
+
 -- ===== ANIMATION STATE =====
 local VisualOffset = 0     -- current pixel offset (ActorFrame y-shift)
 local AnimActive   = false
@@ -97,6 +101,19 @@ local ScorePanelFrame = {}  -- ScorePanelFrame[pn] = ActorFrame reference
 
 -- ===== SONG PREVIEW STATE =====
 local PreviewActor = nil
+local _currentPreviewPath = nil  -- path of the OGG currently playing/loading
+
+-- ===== CACHED SOUND PATHS =====
+local SND_SWITCH = THEME:GetPathS("","_switch down")
+local SND_START  = THEME:GetPathS("Common","Start")
+local SND_CANCEL = THEME:GetPathS("Common","Cancel")
+
+-- Precached ActorSound references (set in InitCommand).
+-- These play through the main audio path, NOT the music thread,
+-- so they are never blocked by a long OGG preview load.
+local SfxSwitch = nil
+local SfxStart  = nil
+local SfxCancel = nil
 
 -- Cursor persistence across screen transitions
 GalaxyCursorState = GalaxyCursorState or {}
@@ -509,12 +526,18 @@ end
 -- ===== SONG PREVIEW =====
 local function PlaySongPreview()
 	if PreviewActor then
+		-- Do NOT call StopMusic here.  The old preview should keep playing
+		-- during the debounce period so the user doesn't hear silence on
+		-- every cursor move.  PlayMusicPart in DoPreview will replace it
+		-- atomically (one queue entry instead of two).
+		_currentPreviewPath = nil  -- clear guard so DoPreview won't skip
 		PreviewActor:stoptweening()
 		PreviewActor:queuecommand("StartPreview")
 	end
 end
 
 local function StopSongPreview()
+	_currentPreviewPath = nil
 	SOUND:StopMusic()
 end
 
@@ -606,7 +629,7 @@ local function ConfirmDifficulty()
 	Accepted = true
 	StopSongPreview()
 	CloseDiffPicker()
-	SOUND:PlayOnce(THEME:GetPathS("Common","Start"))
+	SfxStart:play()
 	SCREENMAN:GetTopScreen():StartTransitioningScreen("SM_GoToNextScreen")
 end
 
@@ -864,11 +887,15 @@ local function Refresh(preItems)
 	-- Only load new images if we've moved consistently in one direction
 	-- (debounce prevents stutter when user bounces up/down)
 	local allowNewLoads = (SameDirCount >= DEBOUNCE_THRESHOLD)
+	local MAX_LOADS_PER_FRAME = 3  -- cap synchronous jacket loads per Refresh
+	local loadsThisFrame = 0
+	local skippedAny = false
 
 	for fi, info in pairs(neededSongs) do
 		if not CardByFlat[fi] then
-			if not allowNewLoads then
-				-- Skip loading — card stays invisible until debounce clears
+			if not allowNewLoads or loadsThisFrame >= MAX_LOADS_PER_FRAME then
+				-- Skip loading — card stays invisible until next frame/debounce
+				skippedAny = true
 			else
 				-- First try a truly free (unassigned) pool slot
 				local ci = nil
@@ -904,9 +931,13 @@ local function Refresh(preItems)
 					Steps = entry[2],
 					HasFocus = info.hasFocus,
 				})
+				loadsThisFrame = loadsThisFrame + 1
 			end
 		end
 	end
+
+	-- Signal deferred loading if we skipped any cards
+	DeferredLoadPending = skippedAny and allowNewLoads
 
 	-- Headers: simple sequential assignment (cheap, no images)
 	for i = 1, POOL_HEADERS do HeaderPool[i]:visible(false) end
@@ -931,7 +962,7 @@ local function MoveCursor(delta)
 	if IsSong(Cursor) then
 		GAMESTATE:SetCurrentSong(FlatList[Cursor][1])
 	end
-	SOUND:PlayOnce(THEME:GetPathS("","_switch down"))
+	SfxSwitch:play()
 
 	-- Track direction for debounce
 	local dir = (delta > 0) and 1 or -1
@@ -1026,11 +1057,11 @@ local function ConfirmSong()
 		SaveCursorState()
 		Accepted = true
 		StopSongPreview()
-		SOUND:PlayOnce(THEME:GetPathS("Common","Start"))
+		SfxStart:play()
 		SCREENMAN:GetTopScreen():StartTransitioningScreen("SM_GoToNextScreen")
 	else
 		-- Multiple difficulties: open picker
-		SOUND:PlayOnce(THEME:GetPathS("","_switch down"))
+		SfxSwitch:play()
 		OpenDiffPicker(song, stepsArray)
 	end
 end
@@ -1082,18 +1113,18 @@ local function InputHandler(event)
 		if btn == "MenuUp" or btn == "MenuLeft" then
 			DiffPickIdx[pn] = (DiffPickIdx[pn] or 1) - 1
 			if DiffPickIdx[pn] < 1 then DiffPickIdx[pn] = #DiffSteps end
-			SOUND:PlayOnce(THEME:GetPathS("","_switch down"))
+			SfxSwitch:play()
 			RefreshDiffPicker()
 		elseif btn == "MenuDown" or btn == "MenuRight" then
 			DiffPickIdx[pn] = (DiffPickIdx[pn] or 1) + 1
 			if DiffPickIdx[pn] > #DiffSteps then DiffPickIdx[pn] = 1 end
-			SOUND:PlayOnce(THEME:GetPathS("","_switch down"))
+			SfxSwitch:play()
 			RefreshDiffPicker()
 		elseif btn == "Start" then
 			ConfirmDifficulty()
 		elseif btn == "Back" then
 			CloseDiffPicker()
-			SOUND:PlayOnce(THEME:GetPathS("Common","Cancel"))
+			SfxCancel:play()
 		end
 		return true
 	end
@@ -1104,12 +1135,12 @@ local function InputHandler(event)
 		if btn == "MenuUp" then
 			MenuRow[pn] = MenuRow[pn] - 1
 			if MenuRow[pn] < 1 then MenuRow[pn] = #rows end
-			SOUND:PlayOnce(THEME:GetPathS("","_switch down"))
+			SfxSwitch:play()
 			RefreshMenu(pn)
 		elseif btn == "MenuDown" then
 			MenuRow[pn] = MenuRow[pn] + 1
 			if MenuRow[pn] > #rows then MenuRow[pn] = 1 end
-			SOUND:PlayOnce(THEME:GetPathS("","_switch down"))
+			SfxSwitch:play()
 			RefreshMenu(pn)
 		elseif btn == "MenuLeft" then
 			local row = rows[MenuRow[pn]]
@@ -1117,7 +1148,7 @@ local function InputHandler(event)
 			if row.selected < 1 then row.selected = #row.choices end
 			-- When Speed Mode changes, update Speed Value choices
 			if MenuRow[pn] == 1 then SyncSpeedValueChoices(pn) end
-			SOUND:PlayOnce(THEME:GetPathS("","_switch down"))
+			SfxSwitch:play()
 			RefreshMenu(pn)
 		elseif btn == "MenuRight" then
 			local row = rows[MenuRow[pn]]
@@ -1125,7 +1156,7 @@ local function InputHandler(event)
 			if row.selected > #row.choices then row.selected = 1 end
 			-- When Speed Mode changes, update Speed Value choices
 			if MenuRow[pn] == 1 then SyncSpeedValueChoices(pn) end
-			SOUND:PlayOnce(THEME:GetPathS("","_switch down"))
+			SfxSwitch:play()
 			RefreshMenu(pn)
 		elseif btn == "Start" then
 			CloseMenu(pn, true)
@@ -1226,7 +1257,7 @@ local function MakeSongCard(name)
 			if songDir ~= _loadedSongDir then
 				_loadedSongDir = songDir
 				local jacket = self:GetChild("Jacket")
-				if params.Song then
+			if params.Song then
 					local path = GetJacketPath(params.Song)
 					jacket:Load(path)
 				end
@@ -1586,17 +1617,22 @@ local t = Def.ActorFrame{
 
 		-- Per-frame animation: shift ActorFrame y along cubic curve
 		self:SetUpdateFunction(function(af, dt)
-			if not AnimActive then return end
-			AnimTime = AnimTime + dt
-			if AnimTime >= ANIM_DUR then
-				VisualOffset = 0
-				AnimActive = false
-				af:y(0)
-				return
+			if AnimActive then
+				AnimTime = AnimTime + dt
+				if AnimTime >= ANIM_DUR then
+					VisualOffset = 0
+					AnimActive = false
+					af:y(0)
+				else
+					local s = AnimTime / ANIM_DUR
+					VisualOffset = EvalCubic(s)
+					af:y(VisualOffset)
+				end
 			end
-			local s = AnimTime / ANIM_DUR
-			VisualOffset = EvalCubic(s)
-			af:y(VisualOffset)
+			-- Deferred jacket loading: load a few more cards each frame
+			if DeferredLoadPending then
+				Refresh()
+			end
 		end)
 	end,
 	OffCommand = function(self)
@@ -1770,6 +1806,7 @@ outer[#outer+1] = MakeDiffPicker(PLAYER_2)
 local INFO_BAR_W = 850
 local INFO_BAR_H = 80
 local INFO_BAR_Y = 55
+local _loadedInfoSongDir = nil   -- guard: skip jacket:Load when same song
 
 local infoPanel = Def.ActorFrame{
 	Name = "SongInfoPanel",
@@ -1793,8 +1830,12 @@ local infoPanel = Def.ActorFrame{
 			title:settext(song:GetDisplayMainTitle()):Regen()
 			artist:visible(true)
 			artist:settext(song:GetDisplayArtist()):Regen()
-			jacket:Load(GetJacketPath(song))
-			jacket:scaletoclipped(60, 60)
+			local songDir = song:GetSongDir()
+			if songDir ~= _loadedInfoSongDir then
+				_loadedInfoSongDir = songDir
+				jacket:Load(GetJacketPath(song))
+				jacket:scaletoclipped(60, 60)
+			end
 			jacket:visible(true)
 
 			-- BPM breakdown: [Min - Mode - Max]
@@ -1825,6 +1866,7 @@ local infoPanel = Def.ActorFrame{
 			bpmText:visible(false)
 			bpmText:settext(""):Regen()
 			jacket:visible(false)
+			_loadedInfoSongDir = nil
 		end
 	end,
 
@@ -1893,7 +1935,9 @@ outer[#outer+1] = infoPanel
 -- ===== SONG PREVIEW ACTOR =====
 -- Invisible actor that handles debounced preview playback.
 -- Uses stoptweening + sleep + queuecommand to debounce rapid scrolling.
-local PREVIEW_DELAY = 0.3  -- seconds to wait before starting preview
+local PREVIEW_DELAY = 0.2  -- seconds; debounce only — just long enough to skip
+                           -- songs the user scrolls past.  The music thread may
+                           -- still block on OGG seek (engine limitation).
 
 outer[#outer+1] = Def.Actor{
 	Name = "SongPreview",
@@ -1901,7 +1945,6 @@ outer[#outer+1] = Def.Actor{
 		PreviewActor = self
 	end,
 	StartPreviewCommand = function(self)
-		SOUND:StopMusic()
 		self:stoptweening():sleep(PREVIEW_DELAY):queuecommand("DoPreview")
 	end,
 	DoPreviewCommand = function(self)
@@ -1909,16 +1952,28 @@ outer[#outer+1] = Def.Actor{
 		if song then
 			local path = song:GetPreviewMusicPath()
 			if path and path ~= "" then
+				-- Skip if this exact file is already playing/loading.
+				-- PlayMusicPart internally queues a stop+play on the music
+				-- thread; calling StopMusic separately doubles the queue
+				-- entries and can starve PlayOnce SFX.
+				if path == _currentPreviewPath then return end
+				_currentPreviewPath = path
 				SOUND:PlayMusicPart(
 					path,
 					song:GetSampleStart(),
 					song:GetSampleLength(),
 					0,    -- fadeIn
-					1,    -- fadeOut
+					0,    -- fadeOut (no fade — avoids lingering sound objects)
 					true, -- loop
 					false,-- applyRate
 					false -- alignBeat
 				)
+			end
+		else
+			-- Cursor is on a group header, not a song — stop music
+			if _currentPreviewPath then
+				_currentPreviewPath = nil
+				SOUND:StopMusic()
 			end
 		end
 	end,
@@ -2307,5 +2362,25 @@ end
 
 outer[#outer+1] = MakeScorePanel(PLAYER_1)
 outer[#outer+1] = MakeScorePanel(PLAYER_2)
+
+-- ===== PRECACHED SFX ACTORS =====
+-- Def.Sound uses its own RageSound instance, bypassing the GameSoundManager
+-- music thread queue. This ensures cursor/confirm/cancel SFX play instantly
+-- even while a long OGG preview is loading on the music thread.
+outer[#outer+1] = Def.Sound{
+	File = SND_SWITCH,
+	IsAction = true,
+	InitCommand = function(self) SfxSwitch = self end,
+}
+outer[#outer+1] = Def.Sound{
+	File = SND_START,
+	IsAction = true,
+	InitCommand = function(self) SfxStart = self end,
+}
+outer[#outer+1] = Def.Sound{
+	File = SND_CANCEL,
+	IsAction = true,
+	InitCommand = function(self) SfxCancel = self end,
+}
 
 return outer
