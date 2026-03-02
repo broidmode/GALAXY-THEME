@@ -1041,6 +1041,8 @@ local function MoveCursor(delta)
 	Cursor = Wrap(Cursor + delta)
 	if IsSong(Cursor) then
 		GAMESTATE:SetCurrentSong(FlatList[Cursor][1])
+	else
+		StopSongPreview()
 	end
 	SfxSwitch:play()
 
@@ -1083,7 +1085,9 @@ local function MoveCursor(delta)
 	Refresh(items)
 	if GridFrame then GridFrame:y(VisualOffset) end
 	RefreshInfoPanel()
-	PlaySongPreview()
+	if IsSong(Cursor) then
+		PlaySongPreview()
+	end
 end
 
 local function ToggleGroup()
@@ -1292,21 +1296,7 @@ local function InputHandler(event)
 		end
 		return true
 	elseif btn == "Back" then
-		if OpenGroup ~= "" then
-			local grp = OpenGroup
-			OpenGroup = ""
-			FlatList = BuildFlatList()
-			for i = 1, #FlatList do
-				if IsGroup(i) and FlatList[i] == grp then
-					Cursor = i
-					break
-				end
-			end
-			ResetAnim()
-			Refresh()
-		else
-			SCREENMAN:GetTopScreen():StartTransitioningScreen("SM_GoToPrevScreen")
-		end
+		SCREENMAN:GetTopScreen():StartTransitioningScreen("SM_GoToPrevScreen")
 		return true
 	end
 
