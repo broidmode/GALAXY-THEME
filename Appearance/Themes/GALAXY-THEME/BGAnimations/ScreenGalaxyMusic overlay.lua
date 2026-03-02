@@ -551,6 +551,16 @@ local function SaveCursorState()
 		GalaxyCursorState.GroupName = item
 		GalaxyCursorState.SongDir = nil
 	end
+
+	-- Persist to each enabled player's profile so it survives game restarts
+	for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
+		if GalaxyOptions and GalaxyOptions[pn] then
+			GalaxyOptions[pn].MusicSelectGroup   = OpenGroup or ""
+			GalaxyOptions[pn].MusicSelectSongDir  = GalaxyCursorState.SongDir or ""
+			GalaxyOptions[pn].MusicSelectSort     = ""  -- reserved for future sort modes
+			SaveGalaxyPlayerPrefs(pn)
+		end
+	end
 end
 
 -- ===== DIFFICULTY PICKER FUNCTIONS =====
@@ -1653,26 +1663,48 @@ local t = Def.ActorFrame{
 			HeaderPool[i] = self:GetChild("Header"..i)
 		end
 
-		-- Restore cursor state from previous visit
-		if GalaxyCursorState.OpenGroup then
-			OpenGroup = GalaxyCursorState.OpenGroup
+		-- Restore cursor state: prefer in-session global, fall back to profile prefs
+		-- (profile prefs survive game restarts; GalaxyCursorState only survives screen transitions)
+		local restoreGroup   = GalaxyCursorState.OpenGroup
+		local restoreSongDir = GalaxyCursorState.SongDir
+		local restoreGroupName = GalaxyCursorState.GroupName
+
+		if not restoreGroup or restoreGroup == "" then
+			-- Try loading from first enabled player's profile
+			for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
+				if GalaxyOptions and GalaxyOptions[pn] then
+					local opts = GalaxyOptions[pn]
+					if opts.MusicSelectGroup and opts.MusicSelectGroup ~= "" then
+						restoreGroup = opts.MusicSelectGroup
+					end
+					if opts.MusicSelectSongDir and opts.MusicSelectSongDir ~= "" then
+						restoreSongDir = opts.MusicSelectSongDir
+						restoreGroupName = nil
+					end
+					break  -- use first player's state
+				end
+			end
+		end
+
+		if restoreGroup and restoreGroup ~= "" then
+			OpenGroup = restoreGroup
 		end
 
 		FlatList = BuildFlatList()
 
 		-- Try to restore cursor position
 		local restored = false
-		if GalaxyCursorState.SongDir then
+		if restoreSongDir and restoreSongDir ~= "" then
 			for i, item in ipairs(FlatList) do
-				if type(item) == "table" and item[1]:GetSongDir() == GalaxyCursorState.SongDir then
+				if type(item) == "table" and item[1]:GetSongDir() == restoreSongDir then
 					Cursor = i
 					restored = true
 					break
 				end
 			end
-		elseif GalaxyCursorState.GroupName then
+		elseif restoreGroupName and restoreGroupName ~= "" then
 			for i, item in ipairs(FlatList) do
-				if type(item) == "string" and item == GalaxyCursorState.GroupName then
+				if type(item) == "string" and item == restoreGroupName then
 					Cursor = i
 					restored = true
 					break

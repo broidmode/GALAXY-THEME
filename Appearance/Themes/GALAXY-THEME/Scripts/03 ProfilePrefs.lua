@@ -24,6 +24,10 @@ local Defaults = {
 	ComboPriority  = 1,        -- index: 1=Low 2=High
 	JudgePriority  = 1,        -- index: 1=Low 2=High
 	JudgePosition  = 1,        -- index: 1=Near 2=Far
+	-- Music select cursor persistence
+	MusicSelectGroup   = "",   -- last opened group name
+	MusicSelectSongDir = "",   -- last selected song directory
+	MusicSelectSort    = "",   -- last sort mode (reserved for future)
 }
 
 -- Ensure GalaxyOptions global exists
@@ -65,6 +69,10 @@ local function LoadGalaxySettings(pn, dir)
 	if sec.ComboPriority  then opts.ComboPriority  = tonumber(sec.ComboPriority)  or Defaults.ComboPriority end
 	if sec.JudgePriority  then opts.JudgePriority  = tonumber(sec.JudgePriority)  or Defaults.JudgePriority end
 	if sec.JudgePosition  then opts.JudgePosition  = tonumber(sec.JudgePosition)  or Defaults.JudgePosition end
+	-- Music select cursor
+	if sec.MusicSelectGroup   then opts.MusicSelectGroup   = tostring(sec.MusicSelectGroup) end
+	if sec.MusicSelectSongDir then opts.MusicSelectSongDir = tostring(sec.MusicSelectSongDir) end
+	if sec.MusicSelectSort    then opts.MusicSelectSort    = tostring(sec.MusicSelectSort) end
 
 	Trace("[GALAXY] Loaded profile prefs for " .. tostring(pn) .. " from " .. path)
 end
@@ -92,6 +100,10 @@ local function SaveGalaxySettings(pn, dir)
 			ComboPriority  = opts.ComboPriority  or Defaults.ComboPriority,
 			JudgePriority  = opts.JudgePriority  or Defaults.JudgePriority,
 			JudgePosition  = opts.JudgePosition  or Defaults.JudgePosition,
+			-- Music select cursor
+			MusicSelectGroup   = opts.MusicSelectGroup   or Defaults.MusicSelectGroup,
+			MusicSelectSongDir = opts.MusicSelectSongDir or Defaults.MusicSelectSongDir,
+			MusicSelectSort    = opts.MusicSelectSort    or Defaults.MusicSelectSort,
 		}
 	}
 
