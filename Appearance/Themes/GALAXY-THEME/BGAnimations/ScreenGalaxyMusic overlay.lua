@@ -102,6 +102,7 @@ local ScorePanelFrame = {}  -- ScorePanelFrame[pn] = ActorFrame reference
 -- ===== SONG PREVIEW STATE =====
 local PreviewActor = nil
 local _currentPreviewPath = nil  -- path of the OGG currently playing/loading
+local _previewGen = 0            -- generation counter: invalidates stale DoPreview callbacks
 
 -- ===== CACHED SOUND PATHS =====
 local SND_SWITCH = THEME:GetPathS("","_switch down")
@@ -531,13 +532,16 @@ local function PlaySongPreview()
 		-- every cursor move.  PlayMusicPart in DoPreview will replace it
 		-- atomically (one queue entry instead of two).
 		_currentPreviewPath = nil  -- clear guard so DoPreview won't skip
+		_previewGen = _previewGen + 1
 		PreviewActor:stoptweening()
 		PreviewActor:queuecommand("StartPreview")
 	end
 end
 
 local function StopSongPreview()
+	_previewGen = _previewGen + 1  -- invalidate any queued DoPreview
 	_currentPreviewPath = nil
+	if PreviewActor then PreviewActor:stoptweening() end
 	SOUND:StopMusic()
 end
 
@@ -2053,9 +2057,16 @@ outer[#outer+1] = Def.Actor{
 		PreviewActor = self
 	end,
 	StartPreviewCommand = function(self)
+		local gen = _previewGen
 		self:stoptweening():sleep(PREVIEW_DELAY):queuecommand("DoPreview")
+		-- Stash the generation so DoPreview can check it
+		self._gen = gen
 	end,
 	DoPreviewCommand = function(self)
+		-- If generation changed since StartPreview, a stop or new play
+		-- was issued in the meantime — discard this stale callback.
+		if self._gen ~= _previewGen then return end
+
 		local song = GAMESTATE:GetCurrentSong()
 		if song then
 			local path = song:GetPreviewMusicPath()
