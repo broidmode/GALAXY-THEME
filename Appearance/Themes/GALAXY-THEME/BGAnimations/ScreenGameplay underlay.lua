@@ -69,14 +69,16 @@ for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
 				notefield:SetBpmBars(true)
 
 				-- Set alpha values: measure lines prominent, 4th subtle, 8th/16th off
-				if type(NoteField.SetBeatBarsAlpha) == "function" then
-					if guideIdx == 1 then
-						-- Center: full measure bars, 4th bars subtle
-						notefield:SetBeatBarsAlpha(1, 0.25, 0, 0)
-					else
-						-- Border: fainter lines
-						notefield:SetBeatBarsAlpha(0.6, 0.15, 0, 0)
-					end
+				if guideIdx == 1 then
+					-- Center: lines through the center of notes
+					notefield:SetBeatBarsAlpha(1, 0.25, 0, 0)
+				else
+					-- Border: shift bars up so thick line sits just above the on-beat
+					-- This frames notes between lines rather than bisecting them.
+					-- -30 at 720p, scaled proportionally for the actual display height.
+					local offset = -30 * (DISPLAY:GetDisplayHeight() / 720)
+					notefield:SetBeatBarOffset(offset)
+					notefield:SetBeatBarsAlpha(1, 0.25, 0, 0)
 				end
 			end,
 		}
