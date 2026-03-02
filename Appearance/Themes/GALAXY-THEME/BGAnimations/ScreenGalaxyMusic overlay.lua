@@ -668,13 +668,83 @@ end
 
 -- ===== DATA LAYER =====
 
+-- Japanese-title sorting -------------------------------------------------
+-- A song "has a Japanese title" when its display title STARTS with a
+-- CJK / Hiragana / Katakana / fullwidth character. We check the first
+-- non-whitespace byte: if it's in a multi-byte UTF-8 sequence starting
+-- at U+3000 or above, it's Japanese/CJK.  Songs with stylized Latin
+-- characters (e.g. "Blφφdy Cφncertφ", "COSMIC V3LOCITY") start with
+-- ASCII letters, so they won't be flagged.
+--
+-- UTF-8 ranges we care about:
+--   U+3000–U+9FFF  → 3-byte sequences starting with 0xE3..0xE9
+--   U+F900–U+FAFF  → CJK compat ideographs (0xEF)
+--   U+FF00–U+FFEF  → fullwidth forms (0xEF)
+-- Any first byte >= 0xE3 (227) covers all of these.
+--
+-- JapaneseSorting pref values:
+--   "first"        → numbers, then Japanese, then English
+--   "last"         → numbers, then English, then Japanese
+--   "alphabetical" → pure alphabetical on transliterated title (default engine order)
+
+local function HasJapaneseTitle(song)
+	local title = song:GetDisplayMainTitle()
+	-- skip leading whitespace
+	local start = title:match("^%s*()")  or 1
+	local b = title:byte(start)
+	if not b then return false end
+	-- Multi-byte UTF-8: first byte >= 0xE3 covers Hiragana, Katakana, CJK, fullwidth
+	return b >= 0xE3
+end
+
+local function StartsWithDigit(s)
+	local b = s:byte(1)
+	return b and b >= 48 and b <= 57   -- '0'..'9'
+end
+
+-- Returns a sort-key string that groups songs by category bucket first,
+-- then alphabetically within each bucket.
+-- Bucket prefixes: "0" = numeric, "1" = first priority, "2" = second priority.
+local function SortKey(song)
+	local translit = song:GetTranslitMainTitle():lower()
+	local jpMode = GetGalaxyPref("JapaneseSorting") or "alphabetical"
+
+	if jpMode == "alphabetical" then
+		return translit
+	end
+
+	local isJP = HasJapaneseTitle(song)
+	local isNum = StartsWithDigit(translit)
+
+	if isNum then
+		return "0" .. translit          -- numbers always first
+	elseif jpMode == "first" then
+		return (isJP and "1" or "2") .. translit
+	else -- "last"
+		return (isJP and "2" or "1") .. translit
+	end
+end
+
+local function SortSongs(songs)
+	-- Build keyed copy so we only compute sort keys once
+	local keyed = {}
+	for i, song in ipairs(songs) do
+		keyed[i] = { song = song, key = SortKey(song) }
+	end
+	table.sort(keyed, function(a, b) return a.key < b.key end)
+	local out = {}
+	for i, v in ipairs(keyed) do out[i] = v.song end
+	return out
+end
+-- -------------------------------------------------------------------------
+
 local function BuildFlatList()
 	local list = {}
 	local groups = SONGMAN:GetSongGroupNames()
 	for _, grp in ipairs(groups) do
 		list[#list+1] = grp
 		if grp == OpenGroup then
-			local songs = SONGMAN:GetSongsInGroup(grp)
+			local songs = SortSongs(SONGMAN:GetSongsInGroup(grp))
 			for _, song in ipairs(songs) do
 				local stType = GAMESTATE:GetCurrentStyle():GetStepsType()
 				local allSteps = song:GetStepsByStepsType(stType)
