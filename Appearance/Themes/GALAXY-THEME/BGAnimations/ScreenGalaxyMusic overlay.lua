@@ -58,10 +58,10 @@ local ANIM_DUR     = 0.15  -- animation duration in seconds
 local AnimA, AnimB, AnimC, AnimD = 0, 0, 0, 0
 
 -- ===== SIDE MENU CONSTANTS =====
-local MENU_W       = 380
+local MENU_W       = 760
 local MENU_X       = SCREEN_WIDTH - MENU_W/2 - 30  -- build-time reference (right side)
 local MENU_X_LEFT  = MENU_W/2 + 30                 -- left side for P1
-local MENU_ROW_H   = 28
+local MENU_ROW_H   = 34
 local MENU_PAD     = 12
 
 -- ===== SIDE MENU STATE =====
@@ -1661,21 +1661,24 @@ local MENU_ROW_NAMES = {
 	"NoteSkin", "Accel", "Cover", "Cover %", "Lane Vis",
 	"Guideline", "StepZone", "Fast/Slow", "Combo",
 	"JudgePri", "JudgePos", "V.Delay", "AudioSync", "Pitch",
+	"Arrow Vis", "Constant",
 }
 local MENU_NUM_ROWS  = #MENU_ROW_NAMES
 
 local function MakeMenu(pn)
 	local numRows = MENU_NUM_ROWS
 	local totalH = MENU_PAD + 36 + numRows * MENU_ROW_H + MENU_PAD + 28 + MENU_PAD
-	local topY = SCREEN_CENTER_Y - totalH/2
+	local topY = SCREEN_CENTER_Y - totalH/2  -- vertically centered
 	local centerY = topY + totalH/2
 	-- P1 always left, P2 always right
 	local menuX = (pn == PLAYER_1) and MENU_X_LEFT or MENU_X
 
 	local m = Def.ActorFrame{
 		Name = "SideMenu_"..ToEnumShortString(pn),
+		DrawOrder = 50,
 		InitCommand = function(self)
 			MenuFrame[pn] = self
+			self:draworder(50)
 			self:visible(false)
 		end,
 		RefreshCommand = function(self)
@@ -1807,7 +1810,7 @@ local function MakeMenu(pn)
 			Name = "Label"..i,
 			Text = MENU_ROW_NAMES[i],
 			InitCommand = function(self)
-				self:xy(menuX - MENU_W/2 + MENU_PAD + 8, rowY)
+				self:xy(menuX - MENU_W/2 + MENU_PAD + 208, rowY)
 					:zoom(FONT_ZOOM)
 					:diffuse(color("#888888"))
 				self:halign(0):maxwidth(FontMaxWidth(MENU_W/2 - MENU_PAD*2)):shadowlength(0)
@@ -1819,7 +1822,7 @@ local function MakeMenu(pn)
 			Font = RodinPath("db"), Size = FontS("db"), Text = "",
 			Name = "Value"..i,
 			InitCommand = function(self)
-				self:xy(menuX + MENU_W/2 - MENU_PAD - 8, rowY)
+				self:xy(menuX + MENU_W/2 - MENU_PAD - 208, rowY)
 					:zoom(FONT_ZOOM)
 					:diffuse(color("#aaaaaa"))
 				self:halign(1):maxwidth(FontMaxWidth(220)):shadowlength(0)
@@ -1834,7 +1837,7 @@ local function MakeMenu(pn)
 		Font = RodinPath("db"), Size = FontS("db"), Text = "",
 		Name = "SpeedPreview",
 		InitCommand = function(self)
-			self:xy(menuX + MENU_W/2 - MENU_PAD - 8, speedRowY + 13)
+			self:xy(menuX + MENU_W/2 - MENU_PAD - 208, speedRowY + 13)
 				:zoom(FONT_ZOOM)
 				:diffuse(color("#66aaff"))
 			self:halign(1):shadowlength(0)
@@ -1875,7 +1878,7 @@ local function MakeMenu(pn)
 	-- Footer hint
 	m[#m+1] = Def.Text{
 		Font = RodinPath("db"), Size = FontS("db"),
-		Text = "Select/Start: Confirm   Back: Cancel",
+		Text = "Select/Start: Confirm,   Back: Cancel,   Select/Start + Left/Right: Fast Change",
 		InitCommand = function(self)
 			local footY = topY + MENU_PAD + 36 + numRows * MENU_ROW_H + MENU_PAD + 8
 			self:xy(menuX, footY)
@@ -2008,8 +2011,8 @@ outer[#outer+1] = MakeMenu(PLAYER_2)
 -- ===== DIFFICULTY PICKER ACTOR =====
 -- Per-player difficulty picker boxes.
 -- 1-player: single centered box.  2-player: two side-by-side boxes.
-local DIFF_ROW_H = 52
-local DIFF_W     = 320
+local DIFF_ROW_H = 104
+local DIFF_W     = 640
 local MAX_DIFFS  = 6
 
 local DIFF_PLAYER_COLORS = {
@@ -2130,7 +2133,7 @@ local function MakeDiffPicker(pn)
 			Font = RodinPath("db"), Size = FontS("db"), Text = "",
 			Name = "DiffLabel"..i,
 			InitCommand = function(self)
-				self:x(boxX - DIFF_W/2 + 20):zoom(FONT_ZOOM)
+				self:x(boxX - DIFF_W/2 + 80):zoom(FONT_ZOOM)
 					:visible(false)
 				self:halign(0):shadowlength(0)
 				self:SetTextureFiltering(false)
@@ -2140,7 +2143,7 @@ local function MakeDiffPicker(pn)
 			Font = RodinPath("db"), Size = FontM("db"), Text = "",
 			Name = "DiffMeter"..i,
 			InitCommand = function(self)
-				self:x(boxX + DIFF_W/2 - 20):zoom(FONT_ZOOM)
+				self:x(boxX + DIFF_W/2 - 80):zoom(FONT_ZOOM)
 					:visible(false)
 				self:halign(1):shadowlength(0)
 				self:SetTextureFiltering(false)
@@ -2352,9 +2355,9 @@ outer[#outer+1] = Def.Actor{
 -- Columns: Diff | Meter | Grade | Score | Lamp | EX Raw | EX% | Flare | FP
 
 local PANEL_W     = 520
-local PANEL_H     = 400
-local PANEL_ROW_H = 60
-local PANEL_Y     = SCREEN_CENTER_Y
+local PANEL_H     = 600    -- 50% taller
+local PANEL_ROW_H = 120    -- per-difficulty block height (2 data rows + headers)
+local PANEL_Y     = SCREEN_CENTER_Y + 100  -- shifted down to clear info bar
 local PANEL_DIFFS = {
 	"Difficulty_Beginner",
 	"Difficulty_Easy",
@@ -2578,163 +2581,171 @@ local function MakeScorePanel(pn)
 				self:zoomto(PANEL_W + 2, PANEL_H + 2):diffuse(color("#334466")):diffusealpha(0.5)
 			end,
 		},
-		-- Column headers
-		Def.Text{ Font = RodinPath("db"), Size = FontS("db"), Text = "DIFF",
-			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 12, -PANEL_H/2 + 12):zoom(FONT_ZOOM):diffuse(color("#667788"))
-				self:halign(0)
-				self:SetTextureFiltering(false)
-			end,
-		},
-		Def.Text{ Font = RodinPath("db"), Size = FontS("db"), Text = "LV",
-			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 65, -PANEL_H/2 + 12):zoom(FONT_ZOOM):diffuse(color("#667788"))
-				self:halign(0.5)
-				self:SetTextureFiltering(false)
-			end,
-		},
-		Def.Text{ Font = RodinPath("db"), Size = FontS("db"), Text = "GRD",
-			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 100, -PANEL_H/2 + 12):zoom(FONT_ZOOM):diffuse(color("#667788"))
-				self:halign(0.5)
-				self:SetTextureFiltering(false)
-			end,
-		},
-		Def.Text{ Font = RodinPath("db"), Size = FontS("db"), Text = "SCORE",
-			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 185, -PANEL_H/2 + 12):zoom(FONT_ZOOM):diffuse(color("#667788"))
-				self:halign(1)
-				self:SetTextureFiltering(false)
-			end,
-		},
-		Def.Text{ Font = RodinPath("db"), Size = FontS("db"), Text = "LAMP",
-			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 235, -PANEL_H/2 + 12):zoom(FONT_ZOOM):diffuse(color("#667788"))
-				self:halign(0.5)
-				self:SetTextureFiltering(false)
-			end,
-		},
-		Def.Text{ Font = RodinPath("db"), Size = FontS("db"), Text = "EX",
-			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 310, -PANEL_H/2 + 12):zoom(FONT_ZOOM):diffuse(color("#667788"))
-				self:halign(1)
-				self:SetTextureFiltering(false)
-			end,
-		},
-		Def.Text{ Font = RodinPath("db"), Size = FontS("db"), Text = "EX%",
-			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 375, -PANEL_H/2 + 12):zoom(FONT_ZOOM):diffuse(color("#667788"))
-				self:halign(1)
-				self:SetTextureFiltering(false)
-			end,
-		},
-		Def.Text{ Font = RodinPath("db"), Size = FontS("db"), Text = "FLARE",
-			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 435, -PANEL_H/2 + 12):zoom(FONT_ZOOM):diffuse(color("#667788"))
-				self:halign(0.5)
-				self:SetTextureFiltering(false)
-			end,
-		},
-		Def.Text{ Font = RodinPath("db"), Size = FontS("db"), Text = "FP",
-			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 500, -PANEL_H/2 + 12):zoom(FONT_ZOOM):diffuse(color("#667788"))
-				self:halign(1)
-				self:SetTextureFiltering(false)
-			end,
-		},
+		-- No global column headers — each difficulty block has its own per-row headers.
 	}
 
-	-- Build 5 difficulty rows
-	local rowStartY = -PANEL_H/2 + 35
-	for i = 1, 5 do
-		local rowY = rowStartY + (i - 1) * PANEL_ROW_H + PANEL_ROW_H/2
+	-- ===== Column anchor X positions (OTF text always centers at its anchor) =====
+	-- Left column (diff acronym + level): centered in a ~130px band on the left.
+	-- Right columns: stats split across the remaining ~390px.
+	local COL_DIFF  = -175   -- diff acronym (Row A, FontM)
+	local COL_LV    = -120   -- level number  (Row A, FontM)
+	local COL_GRD   = -60    -- grade         (Row A)
+	local COL_SCORE =  55    -- DDR score     (Row A)
+	local COL_LAMP  = 185    -- combo lamp    (Row A)
+	local COL_EX    = -60    -- EX raw        (Row B, same x as grade)
+	local COL_EXPCT =  55    -- EX %          (Row B, same x as score)
+	local COL_FLARE = 138    -- flare grade   (Row B)
+	local COL_FP    = 210    -- flare points  (Row B)
 
-		-- Row highlight background
+	-- ===== Within-block Y offsets from block top =====
+	-- Each diff block is PANEL_ROW_H (120px) tall.
+	local OFF_SEP  =   1   -- thin horizontal separator line
+	local OFF_HDRA =  15   -- Row A column header labels
+	local OFF_ROWA =  38   -- Row A data  (diff, level, grade, score, lamp)
+	local OFF_HDRB =  64   -- Row B column header labels
+	local OFF_ROWB =  86   -- Row B data  (EX, EX%, flare grade, flare pts)
+
+	local HDR_COLOR = color("#556677")
+
+	-- ===== Build 5 difficulty blocks =====
+	for i = 1, 5 do
+		-- Block top Y relative to panel centre
+		local bY  = -PANEL_H/2 + (i - 1) * PANEL_ROW_H
+
+		-- Horizontal separator (skip very first one to avoid overdrawing border)
+		if i > 1 then
+			panel[#panel+1] = Def.Quad{
+				InitCommand = function(self)
+					self:y(bY + OFF_SEP):zoomto(PANEL_W - 10, 1)
+						:diffuse(color("#334466")):diffusealpha(0.6)
+				end,
+			}
+		end
+
+		-- Row highlight quad covering the full block
 		panel[#panel+1] = Def.Quad{
 			Name = "SPRowBG" .. i,
 			InitCommand = function(self)
-				self:y(rowY):zoomto(PANEL_W - 6, PANEL_ROW_H - 4):diffusealpha(0)
+				self:y(bY + PANEL_ROW_H/2)
+					:zoomto(PANEL_W - 4, PANEL_ROW_H - 2)
+					:diffusealpha(0)
 			end,
 		}
-		-- Difficulty label
-		panel[#panel+1] = Def.Text{ Font = RodinPath("db"), Size = FontS("db"), Text = "",
+
+		-- ── Row A headers (GRD, SCORE, LAMP) ──────────────────────────────
+		local hAY = bY + OFF_HDRA
+		panel[#panel+1] = Def.Text{ Font = RodinPath("db"), Size = FontS("db"), Text = "GRD",
+			InitCommand = function(self)
+				self:xy(COL_GRD, hAY):zoom(FONT_ZOOM)
+					:diffuse(HDR_COLOR):shadowlength(0):SetTextureFiltering(false)
+			end,
+		}
+		panel[#panel+1] = Def.Text{ Font = RodinPath("db"), Size = FontS("db"), Text = "SCORE",
+			InitCommand = function(self)
+				self:xy(COL_SCORE, hAY):zoom(FONT_ZOOM)
+					:diffuse(HDR_COLOR):shadowlength(0):SetTextureFiltering(false)
+			end,
+		}
+		panel[#panel+1] = Def.Text{ Font = RodinPath("db"), Size = FontS("db"), Text = "LAMP",
+			InitCommand = function(self)
+				self:xy(COL_LAMP, hAY):zoom(FONT_ZOOM)
+					:diffuse(HDR_COLOR):shadowlength(0):SetTextureFiltering(false)
+			end,
+		}
+
+		-- ── Row A data ──────────────────────────────────────────────────────
+		local rAY = bY + OFF_ROWA
+		-- Difficulty acronym (larger)
+		panel[#panel+1] = Def.Text{ Font = RodinPath("db"), Size = FontM("db"), Text = "",
 			Name = "SPDiff" .. i,
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 12, rowY):zoom(FONT_ZOOM)
-				self:halign(0):shadowlength(0)
-				self:SetTextureFiltering(false)
+				self:xy(COL_DIFF, rAY):zoom(FONT_ZOOM):shadowlength(0):SetTextureFiltering(false)
 			end,
 		}
-		-- Meter
-		panel[#panel+1] = Def.Text{ Font = RodinPath("db"), Size = FontS("db"), Text = "",
+		-- Level number (larger, same row)
+		panel[#panel+1] = Def.Text{ Font = RodinPath("db"), Size = FontM("db"), Text = "",
 			Name = "SPMeter" .. i,
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 65, rowY):zoom(FONT_ZOOM)
-				self:halign(0.5):shadowlength(0)
-				self:SetTextureFiltering(false)
+				self:xy(COL_LV, rAY):zoom(FONT_ZOOM):shadowlength(0):SetTextureFiltering(false)
 			end,
 		}
 		-- Grade
 		panel[#panel+1] = Def.Text{ Font = RodinPath("db"), Size = FontS("db"), Text = "",
 			Name = "SPGrade" .. i,
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 100, rowY):zoom(FONT_ZOOM)
-				self:halign(0.5):shadowlength(0)
-				self:SetTextureFiltering(false)
+				self:xy(COL_GRD, rAY):zoom(FONT_ZOOM):shadowlength(0):SetTextureFiltering(false)
 			end,
 		}
-		-- Score
+		-- DDR Score
 		panel[#panel+1] = Def.Text{ Font = RodinPath("db"), Size = FontS("db"), Text = "",
 			Name = "SPScore" .. i,
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 185, rowY):zoom(FONT_ZOOM)
-				self:halign(1):shadowlength(0)
-				self:SetTextureFiltering(false)
+				self:xy(COL_SCORE, rAY):zoom(FONT_ZOOM):shadowlength(0):SetTextureFiltering(false)
 			end,
 		}
 		-- Combo Lamp
 		panel[#panel+1] = Def.Text{ Font = RodinPath("db"), Size = FontS("db"), Text = "",
 			Name = "SPLamp" .. i,
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 235, rowY):zoom(FONT_ZOOM)
-				self:halign(0.5):shadowlength(0)
-				self:SetTextureFiltering(false)
+				self:xy(COL_LAMP, rAY):zoom(FONT_ZOOM):shadowlength(0):SetTextureFiltering(false)
 			end,
 		}
+
+		-- ── Row B headers (EX, EX%, FLARE, FLARE PTS) ─────────────────────
+		local hBY = bY + OFF_HDRB
+		panel[#panel+1] = Def.Text{ Font = RodinPath("db"), Size = FontS("db"), Text = "EX",
+			InitCommand = function(self)
+				self:xy(COL_EX, hBY):zoom(FONT_ZOOM)
+					:diffuse(HDR_COLOR):shadowlength(0):SetTextureFiltering(false)
+			end,
+		}
+		panel[#panel+1] = Def.Text{ Font = RodinPath("db"), Size = FontS("db"), Text = "EX%",
+			InitCommand = function(self)
+				self:xy(COL_EXPCT, hBY):zoom(FONT_ZOOM)
+					:diffuse(HDR_COLOR):shadowlength(0):SetTextureFiltering(false)
+			end,
+		}
+		panel[#panel+1] = Def.Text{ Font = RodinPath("db"), Size = FontS("db"), Text = "FLARE",
+			InitCommand = function(self)
+				self:xy(COL_FLARE, hBY):zoom(FONT_ZOOM)
+					:diffuse(HDR_COLOR):shadowlength(0):SetTextureFiltering(false)
+			end,
+		}
+		panel[#panel+1] = Def.Text{ Font = RodinPath("db"), Size = FontS("db"), Text = "FP",
+			InitCommand = function(self)
+				self:xy(COL_FP, hBY):zoom(FONT_ZOOM)
+					:diffuse(HDR_COLOR):shadowlength(0):SetTextureFiltering(false)
+			end,
+		}
+
+		-- ── Row B data ──────────────────────────────────────────────────────
+		local rBY = bY + OFF_ROWB
 		-- EX Raw
 		panel[#panel+1] = Def.Text{ Font = RodinPath("db"), Size = FontS("db"), Text = "",
 			Name = "SPExRaw" .. i,
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 310, rowY):zoom(FONT_ZOOM)
-				self:halign(1):shadowlength(0)
-				self:SetTextureFiltering(false)
+				self:xy(COL_EX, rBY):zoom(FONT_ZOOM):shadowlength(0):SetTextureFiltering(false)
 			end,
 		}
 		-- EX %
 		panel[#panel+1] = Def.Text{ Font = RodinPath("db"), Size = FontS("db"), Text = "",
 			Name = "SPExPct" .. i,
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 375, rowY):zoom(FONT_ZOOM)
-				self:halign(1):shadowlength(0)
-				self:SetTextureFiltering(false)
+				self:xy(COL_EXPCT, rBY):zoom(FONT_ZOOM):shadowlength(0):SetTextureFiltering(false)
 			end,
 		}
 		-- Flare Grade
 		panel[#panel+1] = Def.Text{ Font = RodinPath("db"), Size = FontS("db"), Text = "",
 			Name = "SPFlare" .. i,
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 435, rowY):zoom(FONT_ZOOM)
-				self:halign(0.5):shadowlength(0)
-				self:SetTextureFiltering(false)
+				self:xy(COL_FLARE, rBY):zoom(FONT_ZOOM):shadowlength(0):SetTextureFiltering(false)
 			end,
 		}
 		-- Flare Points
 		panel[#panel+1] = Def.Text{ Font = RodinPath("db"), Size = FontS("db"), Text = "",
 			Name = "SPFp" .. i,
 			InitCommand = function(self)
-				self:xy(-PANEL_W/2 + 500, rowY):zoom(FONT_ZOOM)
-				self:halign(1):shadowlength(0)
-				self:SetTextureFiltering(false)
+				self:xy(COL_FP, rBY):zoom(FONT_ZOOM):shadowlength(0):SetTextureFiltering(false)
 			end,
 		}
 	end

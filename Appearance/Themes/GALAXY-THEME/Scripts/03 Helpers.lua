@@ -74,6 +74,8 @@ end
 local _RodinPaths = {}
 function RodinPath(weight)
 	weight = weight or "m"
+	-- "db" is aliased to "b" — Bold is the theme-wide default weight.
+	if weight == "db" then weight = "b" end
 	if not _RodinPaths[weight] then
 		_RodinPaths[weight] = THEME:GetPathF("", "rodin/rodin_" .. weight .. ".otf")
 	end
