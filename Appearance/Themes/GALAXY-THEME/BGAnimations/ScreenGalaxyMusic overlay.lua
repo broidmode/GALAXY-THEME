@@ -61,8 +61,8 @@ local AnimA, AnimB, AnimC, AnimD = 0, 0, 0, 0
 local MENU_W       = 380
 local MENU_X       = SCREEN_WIDTH - MENU_W/2 - 30  -- build-time reference (right side)
 local MENU_X_LEFT  = MENU_W/2 + 30                 -- left side for P1
-local MENU_ROW_H   = 36
-local MENU_PAD     = 16
+local MENU_ROW_H   = 28
+local MENU_PAD     = 12
 
 -- ===== SIDE MENU STATE =====
 -- Per-player: each player has their own menu, option rows, and cursor
@@ -78,6 +78,9 @@ local _confirmDirty = {}   -- _confirmDirty[pn] = true if L/R pressed during hol
 -- Fast-step sizes when confirm is held + L/R per row index (nil = normal step)
 local FAST_STEP = {
 	[2] = 10,  -- Speed: jump 10 choices per press (100 BPM or x0.50)
+	[18] = 10, -- Visual Delay: jump 10 choices (50ms) per press
+	[19] = 10, -- Audio Sync: jump 10 choices (50ms) per press
+	[20] = 10, -- Pitch: jump 10 choices (0.50x) per press
 }
 
 -- Special fast-jump targets for specific rows (by row index)
@@ -253,7 +256,34 @@ local JudgePositionChoices = {
 	{ label = "Far",  value = "Far" },
 }
 
-local NUM_OPTION_ROWS = 17
+-- Visual Delay: -500ms to +500ms in 5ms steps
+local VisualDelayChoices = {}
+do
+	for ms = -500, 500, 5 do
+		local lbl = (ms >= 0 and "+" or "") .. ms .. "ms"
+		VisualDelayChoices[#VisualDelayChoices+1] = { label = lbl, value = ms }
+	end
+end
+
+-- Audio Sync: -500ms to +500ms in 5ms steps
+local AudioSyncChoices = {}
+do
+	for ms = -500, 500, 5 do
+		local lbl = (ms >= 0 and "+" or "") .. ms .. "ms"
+		AudioSyncChoices[#AudioSyncChoices+1] = { label = lbl, value = ms }
+	end
+end
+
+-- Pitch (music rate): 0.50x to 2.00x in 0.05 steps (stored as int*100)
+local PitchChoices = {}
+do
+	for r = 50, 200, 5 do
+		local lbl = string.format("x%.2f", r / 100)
+		PitchChoices[#PitchChoices+1] = { label = lbl, value = r }
+	end
+end
+
+local NUM_OPTION_ROWS = 20
 
 -- Helper: find index in a choices array where c[field] == val
 local function FindChoiceIdx(choices, field, val, fallback)
@@ -320,6 +350,14 @@ local function BuildOptionRowsForPlayer(pn)
 	local judgep   = opts.JudgePriority  or 1
 	local judgepos = opts.JudgePosition  or 1
 
+	local vdelay   = opts.VisualDelay    or 0
+	local async    = opts.AudioSync      or 0
+	local pitch    = opts.Pitch          or 100
+
+	local vdelayIdx = FindClosestIdx(VisualDelayChoices, vdelay)
+	local asyncIdx  = FindClosestIdx(AudioSyncChoices, async)
+	local pitchIdx  = FindClosestIdx(PitchChoices, pitch)
+
 	return {
 		{ name = "Mode",      choices = SpeedModes,          selected = modeIdx },
 		{ name = "Speed",     choices = speedChoices,         selected = speedIdx },
@@ -338,6 +376,9 @@ local function BuildOptionRowsForPlayer(pn)
 		{ name = "Combo",     choices = ComboPriorityChoices, selected = math.max(1, math.min(combop, #ComboPriorityChoices)) },
 		{ name = "JudgePri",  choices = JudgePriorityChoices, selected = math.max(1, math.min(judgep, #JudgePriorityChoices)) },
 		{ name = "JudgePos",  choices = JudgePositionChoices, selected = math.max(1, math.min(judgepos, #JudgePositionChoices)) },
+		{ name = "V.Delay",   choices = VisualDelayChoices,   selected = vdelayIdx },
+		{ name = "AudioSync", choices = AudioSyncChoices,     selected = asyncIdx },
+		{ name = "Pitch",     choices = PitchChoices,         selected = pitchIdx },
 	}
 end
 
@@ -559,6 +600,21 @@ local function ApplyMenuOptions(pn)
 
 	-- Judge Position (row 17): theme-level setting
 	GalaxyOptions[pn].JudgePosition = rows[17].selected
+
+	-- Visual Delay (row 18): ms offset applied to engine before gameplay
+	GalaxyOptions[pn].VisualDelay = VisualDelayChoices[rows[18].selected].value
+
+	-- Audio Sync (row 19): ms offset applied to engine before gameplay
+	GalaxyOptions[pn].AudioSync = AudioSyncChoices[rows[19].selected].value
+
+	-- Pitch (row 20): music rate applied to engine before gameplay
+	GalaxyOptions[pn].Pitch = PitchChoices[rows[20].selected].value
+
+	-- Apply engine-level settings (PREFSMAN / SongOptions)
+	PREFSMAN:SetPreference("VisualDelaySeconds", GalaxyOptions[pn].VisualDelay / 1000)
+	PREFSMAN:SetPreference("GlobalOffsetSeconds", GalaxyOptions[pn].AudioSync / 1000)
+	local so = GAMESTATE:GetSongOptionsObject("ModsLevel_Preferred")
+	if so then so:MusicRate(GalaxyOptions[pn].Pitch / 100) end
 end
 
 local function RefreshMenu(pn)
@@ -1561,7 +1617,12 @@ local function MakeGroupHeader(name)
 end
 
 -- ===== SIDE MENU ACTOR =====
-local MENU_ROW_NAMES = {"Mode", "Speed", "Turn", "Scroll", "Gauge", "NoteSkin", "Accel", "Cover", "Lane Vis", "Guideline", "StepZone", "Fast/Slow", "Combo", "JudgePri", "JudgePos"}
+local MENU_ROW_NAMES = {
+	"Mode", "Speed", "Turn", "Scroll", "Gauge", "Fail",
+	"NoteSkin", "Accel", "Cover", "Cover %", "Lane Vis",
+	"Guideline", "StepZone", "Fast/Slow", "Combo",
+	"JudgePri", "JudgePos", "V.Delay", "AudioSync", "Pitch",
+}
 local MENU_NUM_ROWS  = #MENU_ROW_NAMES
 
 local function MakeMenu(pn)
