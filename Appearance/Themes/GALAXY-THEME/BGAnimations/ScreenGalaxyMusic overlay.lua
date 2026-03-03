@@ -855,7 +855,7 @@ end
 -- JapaneseSorting pref values:
 --   "first"        → numbers, then Japanese, then English
 --   "last"         → numbers, then English, then Japanese
---   "alphabetical" → pure alphabetical on transliterated title (default engine order)
+--   "romaji"       → pure alphabetical on transliterated title (default engine order)
 
 local function HasJapaneseTitle(song)
 	local title = song:GetDisplayMainTitle()
@@ -877,9 +877,9 @@ end
 -- Bucket prefixes: "0" = numeric, "1" = first priority, "2" = second priority.
 local function SortKey(song)
 	local translit = song:GetTranslitMainTitle():lower()
-	local jpMode = GetGalaxyPref("JapaneseSorting") or "alphabetical"
+	local jpMode = GetGalaxyPref("JapaneseSorting") or "romaji"
 
-	if jpMode == "alphabetical" then
+	if jpMode == "romaji" then
 		return translit
 	end
 
@@ -2156,9 +2156,9 @@ outer[#outer+1] = MakeDiffPicker(PLAYER_2)
 
 -- ===== SONG INFO BAR =====
 -- Displays jacket, title, artist, BPM in a centered bar at the top of the screen.
-local INFO_BAR_W = 850
-local INFO_BAR_H = 80
-local INFO_BAR_Y = 55
+local INFO_BAR_W = 1275   -- 1.5× original (850)
+local INFO_BAR_H = 240    -- 3× original (80)
+local INFO_BAR_Y = 130    -- moved down to keep taller bar on screen
 local _loadedInfoSongDir = nil   -- guard: skip jacket:Load when same song
 
 local infoPanel = Def.ActorFrame{
@@ -2187,7 +2187,7 @@ local infoPanel = Def.ActorFrame{
 			if songDir ~= _loadedInfoSongDir then
 				_loadedInfoSongDir = songDir
 				jacket:Load(GetJacketPath(song))
-				jacket:scaletoclipped(60, 60)
+				jacket:scaletoclipped(180, 180)  -- 3× original (60)
 			end
 			jacket:visible(true)
 
@@ -2239,49 +2239,50 @@ local infoPanel = Def.ActorFrame{
 				:diffuse(color("#0a0a18")):diffusealpha(0.92):visible(false)
 		end,
 	},
-	-- Jacket
+	-- Jacket — left side, 3× size, vertically centered
 	Def.Sprite{
 		Name = "InfoJacket",
 		InitCommand = function(self)
-			self:x(-INFO_BAR_W/2 + 42):visible(false)
+			-- 15px edge padding + 90px (half of 180px jacket) = 105px from left edge
+			self:x(-INFO_BAR_W/2 + 105):visible(false)
 		end,
 	},
-	-- Song title
+	-- Song title — centered in the bar; OTF font always centers at anchor
 	Def.Text{
-		Font = RodinPath("db"), Size = FontM("db"), Text = "",
+		Font = RodinPath("db"), Size = FontL("db"), Text = "",
 		Name = "InfoTitle",
 		InitCommand = function(self)
-			self:xy(-INFO_BAR_W/2 + 82, -12)
+			self:xy(0, -48)
 				:zoom(FONT_ZOOM)
 				:diffuse(Color.White)
 				:visible(false)
-			self:halign(0):valign(0.5):maxwidth(FontMaxWidth(INFO_BAR_W - 130)):shadowlength(0)
+			self:maxwidth(FontMaxWidth(800)):shadowlength(0)
 			self:SetTextureFiltering(false)
 		end,
 	},
-	-- Artist
+	-- Artist — centered, below title
 	Def.Text{
-		Font = RodinPath("db"), Size = FontS("db"), Text = "",
+		Font = RodinPath("db"), Size = FontM("db"), Text = "",
 		Name = "InfoArtist",
 		InitCommand = function(self)
-			self:xy(-INFO_BAR_W/2 + 82, 12)
+			self:xy(0, -4)
 				:zoom(FONT_ZOOM)
 				:diffuse(color("#aaaaaa"))
 				:visible(false)
-			self:halign(0):valign(0.5):maxwidth(FontMaxWidth(INFO_BAR_W - 130)):shadowlength(0)
+			self:maxwidth(FontMaxWidth(800)):shadowlength(0)
 			self:SetTextureFiltering(false)
 		end,
 	},
-	-- BPM
+	-- BPM — centered, directly below artist
 	Def.Text{
-		Font = RodinPath("db"), Size = FontS("db"), Text = "",
+		Font = RodinPath("db"), Size = FontM("db"), Text = "",
 		Name = "InfoBPM",
 		InitCommand = function(self)
-			self:xy(INFO_BAR_W/2 - 15, 0)
+			self:xy(0, 40)
 				:zoom(FONT_ZOOM)
 				:diffuse(color("#66aaff"))
 				:visible(false)
-			self:halign(1):valign(0.5):shadowlength(0)
+			self:maxwidth(FontMaxWidth(800)):shadowlength(0)
 			self:SetTextureFiltering(false)
 		end,
 	},
