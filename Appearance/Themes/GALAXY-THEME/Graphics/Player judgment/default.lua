@@ -8,8 +8,8 @@ local player = Var "Player"
 -- ===== SIZE TUNING =====
 -- Adjust these multipliers to scale the judgment and fast/slow sprites.
 -- A value of 1.0 = original art size; 0.5 = half size, etc.
-local JUDGE_SCALE  = 0.30   -- judgment sprite base scale
-local FS_SCALE     = 0.30   -- fast/slow sprite base scale
+local JUDGE_SCALE  = 0.28   -- judgment sprite base scale
+local FS_SCALE     = 0.28   -- fast/slow sprite base scale
 
 -- Animation commands per judgment (zoom values are relative to JUDGE_SCALE)
 local JudgeCmds = {
@@ -68,13 +68,27 @@ t[#t+1] = Def.ActorFrame{
 		c = self:GetChildren()
 	end,
 
+	-- ===== JUDGMENT SPRITE =====
+	-- Defined first so it draws beneath FastSlow.
+	LoadActor("Judgment") .. {
+		Name = "Judgment",
+		InitCommand = function(self)
+			self:pause():visible(false)
+		end,
+		OnCommand = function(self)
+			self:y(GetJudgeY())
+		end,
+		ResetCommand = cmd(finishtweening;stopeffect;visible,false),
+	},
+
 	-- ===== FAST / SLOW INDICATOR =====
+	-- Defined second so it always draws on top of the judgment sprite.
 	LoadActor("FastSlow") .. {
 		InitCommand = function(self)
 			self:diffusealpha(0):animate(false)
 		end,
 		OnCommand = function(self)
-			local fsY = IsReverse() and -50 or 50
+			local fsY = IsReverse() and -25 or 25
 			self:xy(0, GetJudgeY() + fsY)
 		end,
 		JudgmentMessageCommand = function(self, params)
@@ -100,18 +114,6 @@ t[#t+1] = Def.ActorFrame{
 				:linear(0.05):zoom(FS_SCALE)
 				:sleep(0.4):diffusealpha(0)
 		end,
-	},
-
-	-- ===== JUDGMENT SPRITE =====
-	LoadActor("Judgment") .. {
-		Name = "Judgment",
-		InitCommand = function(self)
-			self:pause():visible(false)
-		end,
-		OnCommand = function(self)
-			self:y(GetJudgeY())
-		end,
-		ResetCommand = cmd(finishtweening;stopeffect;visible,false),
 	},
 
 	-- ===== JUDGMENT MESSAGE HANDLER =====

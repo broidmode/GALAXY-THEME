@@ -46,18 +46,28 @@ GalaxyOptions = GalaxyOptions or {}
 function IsJudgmentUnderField()
 	local result = true  -- default: under field (Low)
 	if GalaxyOptions then
-		local anyHigh = false
-		for k, opts in pairs(GalaxyOptions) do
-			if type(opts) == "table" then
-				Trace("GALAXY IsJudgmentUnderField: key=" .. tostring(k) .. " JudgePriority=" .. tostring(opts.JudgePriority))
-				if opts.JudgePriority == 2 then
-					anyHigh = true
-				end
+		for _, opts in pairs(GalaxyOptions) do
+			if type(opts) == "table" and opts.JudgePriority == 2 then
+				result = false
+				break
 			end
 		end
-		if anyHigh then result = false end
 	end
-	Trace("GALAXY IsJudgmentUnderField => " .. tostring(result))
+	return result
+end
+
+-- Called by metrics.ini [Player] ComboUnderField.
+-- Returns true (behind notes) unless any player has ComboPriority == 2 (High).
+function IsComboUnderField()
+	local result = true
+	if GalaxyOptions then
+		for _, opts in pairs(GalaxyOptions) do
+			if type(opts) == "table" and opts.ComboPriority == 2 then
+				result = false
+				break
+			end
+		end
+	end
 	return result
 end
 
