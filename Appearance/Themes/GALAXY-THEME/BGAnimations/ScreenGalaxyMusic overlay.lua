@@ -1693,11 +1693,13 @@ local function MakeMenu(pn)
 				end
 				if label then
 					label:settext(row and row.name or MENU_ROW_NAMES[i]):Regen()
+					label:halign(0):maxwidth(FontMaxWidth(MENU_W/2 - MENU_PAD))
 					label:diffuse(i == MenuRow[pn] and Color.White or color("#888888"))
 				end
 				if value then
 					local ch = row and row.choices[row.selected]
 					value:settext(ch and ch.label or ""):Regen()
+					value:halign(1):maxwidth(FontMaxWidth(MENU_W/2 - MENU_PAD))
 					value:diffuse(i == MenuRow[pn] and Color.White or color("#aaaaaa"))
 				end
 			end
@@ -1708,6 +1710,7 @@ local function MakeMenu(pn)
 				local song = GAMESTATE:GetCurrentSong()
 				if not song then
 					preview:settext(""):Regen()
+					preview:halign(1)
 				else
 					local mode = SpeedModes[rows[1].selected].value
 					local val  = rows[2].choices[rows[2].selected].value
@@ -1747,6 +1750,7 @@ local function MakeMenu(pn)
 					else
 						preview:settext(eMin .. " - " .. eMode .. " - " .. eMax):Regen()
 					end
+					preview:halign(1)
 				end
 			end
 		end,
