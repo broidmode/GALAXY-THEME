@@ -58,10 +58,10 @@ local ANIM_DUR     = 0.15  -- animation duration in seconds
 local AnimA, AnimB, AnimC, AnimD = 0, 0, 0, 0
 
 -- ===== SIDE MENU CONSTANTS =====
-local MENU_W       = 380
+local MENU_W       = 760
 local MENU_X       = SCREEN_WIDTH - MENU_W/2 - 30  -- build-time reference (right side)
 local MENU_X_LEFT  = MENU_W/2 + 30                 -- left side for P1
-local MENU_ROW_H   = 28
+local MENU_ROW_H   = 38
 local MENU_PAD     = 12
 
 -- ===== SIDE MENU STATE =====
@@ -81,6 +81,7 @@ local FAST_STEP = {
 	[18] = 10, -- Visual Delay: jump 10 choices (50ms) per press
 	[19] = 10, -- Audio Sync: jump 10 choices (50ms) per press
 	[20] = 10, -- Pitch: jump 10 choices (0.50x) per press
+	[22] = 10, -- Constant: jump 10 choices (100ms) per press
 }
 
 -- Special fast-jump targets for specific rows (by row index)
@@ -1661,13 +1662,14 @@ local MENU_ROW_NAMES = {
 	"NoteSkin", "Accel", "Cover", "Cover %", "Lane Vis",
 	"Guideline", "StepZone", "Fast/Slow", "Combo",
 	"JudgePri", "JudgePos", "V.Delay", "AudioSync", "Pitch",
+	"Arrow Vis", "Constant",
 }
 local MENU_NUM_ROWS  = #MENU_ROW_NAMES
 
 local function MakeMenu(pn)
 	local numRows = MENU_NUM_ROWS
 	local totalH = MENU_PAD + 36 + numRows * MENU_ROW_H + MENU_PAD + 28 + MENU_PAD
-	local topY = SCREEN_CENTER_Y - totalH/2
+	local topY = 40
 	local centerY = topY + totalH/2
 	-- P1 always left, P2 always right
 	local menuX = (pn == PLAYER_1) and MENU_X_LEFT or MENU_X
@@ -1810,7 +1812,7 @@ local function MakeMenu(pn)
 				self:xy(menuX - MENU_W/2 + MENU_PAD + 8, rowY)
 					:zoom(FONT_ZOOM)
 					:diffuse(color("#888888"))
-				self:halign(0):maxwidth(FontMaxWidth(MENU_W/2 - MENU_PAD*2)):shadowlength(0)
+				self:halign(0):maxwidth(FontMaxWidth(MENU_W/2 - MENU_PAD)):shadowlength(0)
 				self:SetTextureFiltering(false)
 			end,
 		}
@@ -1822,7 +1824,7 @@ local function MakeMenu(pn)
 				self:xy(menuX + MENU_W/2 - MENU_PAD - 8, rowY)
 					:zoom(FONT_ZOOM)
 					:diffuse(color("#aaaaaa"))
-				self:halign(1):maxwidth(FontMaxWidth(220)):shadowlength(0)
+				self:halign(1):maxwidth(FontMaxWidth(MENU_W/2 - MENU_PAD)):shadowlength(0)
 				self:SetTextureFiltering(false)
 			end,
 		}
