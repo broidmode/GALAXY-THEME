@@ -1101,7 +1101,13 @@ local function Refresh(preItems)
 	-- Only load new images if we've moved consistently in one direction
 	-- (debounce prevents stutter when user bounces up/down)
 	local allowNewLoads = (SameDirCount >= DEBOUNCE_THRESHOLD)
-	local MAX_LOADS_PER_FRAME = 3  -- cap synchronous jacket loads per Refresh
+	-- Jacket quality (theme pref) controls loading strategy:
+	--   low: LoadFromCached thumbnails — fast, no cap needed
+	--   incremental: full-res, 3 per frame (default)
+	--   full: full-res, no cap, bypass debounce
+	local _jq = GetGalaxyPref("JacketQuality") or "incremental"
+	if _jq == "full" then allowNewLoads = true end
+	local MAX_LOADS_PER_FRAME = (_jq == "incremental") and 3 or math.huge
 	local loadsThisFrame = 0
 	local skippedAny = false
 
@@ -1531,9 +1537,16 @@ local function MakeSongCard(name)
 			if songDir ~= _loadedSongDir then
 				_loadedSongDir = songDir
 				local jacket = self:GetChild("Jacket")
-			if params.Song then
+				if params.Song then
 					local path = GetJacketPath(params.Song)
-					jacket:Load(path)
+					-- Low quality: use engine thumbnail cache (small, fast)
+					-- Incremental / Full: load full-res from disk
+					local q = GetGalaxyPref("JacketQuality") or "incremental"
+					if q == "low" then
+						jacket:LoadFromCached("Jacket", path)
+					else
+						jacket:Load(path)
+					end
 				end
 				local targetSz = CARD_W - 16
 				jacket:scaletoclipped(targetSz, targetSz)

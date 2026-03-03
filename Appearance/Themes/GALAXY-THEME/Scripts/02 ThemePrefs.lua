@@ -26,6 +26,12 @@ local Prefs = {
 		Choices = { "First", "Last", "Alphabetical" },
 		Values  = { "first", "last", "alphabetical" },
 	},
+	-- Music select jacket art quality
+	JacketQuality = {
+		Default = "incremental",
+		Choices = { "Low", "Incremental", "Full" },
+		Values  = { "low", "incremental", "full" },
+	},
 }
 
 ThemePrefs.InitAll(Prefs)
