@@ -23,13 +23,13 @@ local Prefs = {
 	-- Sorting
 	JapaneseSorting = {
 		Default = "first",
-		Choices = { "First", "Last", "Alphabetical" },
-		Values  = { "first", "last", "alphabetical" },
+		Choices = { "First", "Last", "Romaji" },
+		Values  = { "first", "last", "romaji" },
 	},
 	-- Music select jacket art quality
 	JacketQuality = {
 		Default = "incremental",
-		Choices = { "Low", "Incremental", "Full" },
+		Choices = { "Low", "Incremental", "Unlimited" },
 		Values  = { "low", "incremental", "full" },
 	},
 }
