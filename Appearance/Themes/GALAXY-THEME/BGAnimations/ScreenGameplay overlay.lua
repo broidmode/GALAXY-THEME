@@ -184,6 +184,121 @@ for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
 	end
 end
 
+-- ===== CONSTANT MODE ARROW VISIBILITY COVERS =====
+-- When ArrowVis == 2 (Constant), notes are hidden above a time-based threshold.
+-- A solid black cover hides the "far" zone; a gradient quad fades notes in over
+-- a 10ms window just before the threshold. Updates each frame via UpdateCommand.
+-- The cover height is derived from the user's ConstantMs setting and the current
+-- effective display BPM (CMod value or XMod * current song BPS * 60).
+-- 4 display-beats are assumed to fill the full screen at the given speed,
+-- matching the DDR reference: fullScreenMs = 240000 / displayBPM.
+for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
+	local opts = GalaxyOptions[pn] or {}
+	if (opts.ArrowVis or 1) == 2 then
+		local style  = GAMESTATE:GetCurrentStyle(pn)
+		local coverW = style:GetWidth(pn) * (style:ColumnsPerPlayer() / 1.7)
+
+		-- Shared state populated by the solid cover's UpdateCommand each frame,
+		-- then consumed by the gradient quad's UpdateCommand (runs immediately after).
+		local coverState = { coverH = 0, fadeH = 0, isReverse = false }
+		local cachedX = 0  -- player center X; set once in OnCommand
+
+		-- Solid cover: fully opaque, hides notes outside the constant window
+		t[#t+1] = Def.Quad{
+			Name = "ConstantSolid_" .. ToEnumShortString(pn),
+			InitCommand = function(self)
+				self:diffuse(color("#000000")):visible(false)
+			end,
+			OnCommand = function(self)
+				local screen = SCREENMAN:GetTopScreen()
+				if not screen then return end
+				local pa = screen:GetChild("Player" .. ToEnumShortString(pn))
+				if not pa then return end
+				cachedX = pa:GetX()
+				self:x(cachedX):visible(true)
+			end,
+			UpdateCommand = function(self, dt)
+				local curOpts  = GalaxyOptions[pn] or {}
+				local mode     = curOpts.SpeedMode or "Real"
+				local displayBPM
+				if mode == "XMod" then
+					local curBPS = GAMESTATE:GetSongBPS()
+					local rate   = (curOpts.SpeedRate or 100) / 100
+					displayBPM   = curBPS * 60 * rate
+				else
+					-- Real, CMod, MMod: SpeedValue is the target BPM
+					displayBPM = curOpts.SpeedValue or 200
+				end
+				displayBPM = math.max(1, displayBPM)
+
+				-- 4 display-beats at displayBPM = total screen travel time in ms
+				local fullScreenMs = 240000 / displayBPM
+				local constMs      = math.max(0, curOpts.ConstantMs or 1000)
+				local FADE_MS      = 10
+
+				local visibleFrac = math.min(1, constMs / fullScreenMs)
+				local hiddenFrac  = 1 - visibleFrac
+				local fadeFrac    = math.min(visibleFrac, FADE_MS / fullScreenMs)
+
+				local cH = SCREEN_HEIGHT * hiddenFrac
+				local fH = SCREEN_HEIGHT * fadeFrac
+
+				local isRev = GAMESTATE:GetPlayerState(pn):GetPlayerOptions("ModsLevel_Current"):Reverse() == 1
+				coverState.coverH    = cH
+				coverState.fadeH     = fH
+				coverState.isReverse = isRev
+
+				if cH <= 0 then
+					self:visible(false)
+				else
+					self:visible(true):zoomto(coverW, cH)
+					if isRev then
+						-- Reverse: judgment at top, notes from bottom — cover the bottom
+						self:y(SCREEN_HEIGHT - cH / 2)
+					else
+						-- Normal: judgment at bottom, notes from top — cover the top
+						self:y(cH / 2)
+					end
+				end
+			end,
+		}
+
+		-- Gradient fade zone: fades smoothly from the solid cover into the visible zone
+		t[#t+1] = Def.Quad{
+			Name = "ConstantFade_" .. ToEnumShortString(pn),
+			InitCommand = function(self)
+				self:visible(false)
+			end,
+			OnCommand = function(self)
+				-- cachedX is already set by the solid cover's OnCommand (runs first)
+				self:x(cachedX):visible(true)
+			end,
+			UpdateCommand = function(self, dt)
+				local cH = coverState.coverH
+				local fH = coverState.fadeH
+				if fH <= 0 then
+					self:visible(false)
+					return
+				end
+				self:visible(true):zoomto(coverW, fH)
+				if coverState.isReverse then
+					-- Reverse: solid cover is at bottom; fade zone is above it
+					-- Transparent at top (toward center of field), opaque at bottom (into cover)
+					self:diffuseupperleft({0,0,0,0}):diffuseupperright({0,0,0,0})
+						:diffuselowerleft({0,0,0,1}):diffuselowerright({0,0,0,1})
+					self:y(SCREEN_HEIGHT - cH - fH / 2)
+				else
+					-- Normal: solid cover is at top; fade zone is below it
+					-- Opaque at top (into cover), transparent at bottom (into visible zone)
+					self:diffuseupperleft({0,0,0,1}):diffuseupperright({0,0,0,1})
+						:diffuselowerleft({0,0,0,0}):diffuselowerright({0,0,0,0})
+					self:y(cH + fH / 2)
+				end
+			end,
+		}
+	end
+end
+
 -- ===== HUD ELEMENTS (per player) =====
 for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
 	local isP1 = (pn == PLAYER_1)

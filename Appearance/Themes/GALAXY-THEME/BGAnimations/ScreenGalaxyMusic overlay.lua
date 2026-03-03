@@ -283,7 +283,21 @@ do
 	end
 end
 
-local NUM_OPTION_ROWS = 20
+-- Arrow Visibility: Normal or Constant
+local ArrowVisChoices = {
+	{ label = "Normal",   value = 1 },
+	{ label = "Constant", value = 2 },
+}
+
+-- Constant Mode visibility window: 0ms to 1000ms in 10ms steps
+local ConstantMsChoices = {}
+do
+	for ms = 0, 1000, 10 do
+		ConstantMsChoices[#ConstantMsChoices+1] = { label = ms.."ms", value = ms }
+	end
+end
+
+local NUM_OPTION_ROWS = 22
 
 -- Helper: find index in a choices array where c[field] == val
 local function FindChoiceIdx(choices, field, val, fallback)
@@ -358,6 +372,10 @@ local function BuildOptionRowsForPlayer(pn)
 	local asyncIdx  = FindClosestIdx(AudioSyncChoices, async)
 	local pitchIdx  = FindClosestIdx(PitchChoices, pitch)
 
+	local arrowvis   = opts.ArrowVis   or 1
+	local constms    = opts.ConstantMs or 1000
+	local constmsIdx = FindClosestIdx(ConstantMsChoices, constms)
+
 	return {
 		{ name = "Mode",      choices = SpeedModes,          selected = modeIdx },
 		{ name = "Speed",     choices = speedChoices,         selected = speedIdx },
@@ -379,6 +397,8 @@ local function BuildOptionRowsForPlayer(pn)
 		{ name = "V.Delay",   choices = VisualDelayChoices,   selected = vdelayIdx },
 		{ name = "AudioSync", choices = AudioSyncChoices,     selected = asyncIdx },
 		{ name = "Pitch",     choices = PitchChoices,         selected = pitchIdx },
+		{ name = "Arrow Vis", choices = ArrowVisChoices,      selected = math.max(1, math.min(arrowvis, #ArrowVisChoices)) },
+		{ name = "Constant",  choices = ConstantMsChoices,   selected = constmsIdx },
 	}
 end
 
@@ -609,6 +629,12 @@ local function ApplyMenuOptions(pn)
 
 	-- Pitch (row 20): music rate applied to engine before gameplay
 	GalaxyOptions[pn].Pitch = PitchChoices[rows[20].selected].value
+
+	-- Arrow Visibility (row 21): Normal or Constant
+	GalaxyOptions[pn].ArrowVis = ArrowVisChoices[rows[21].selected].value
+
+	-- Constant Value (row 22): millisecond visibility window for Constant mode
+	GalaxyOptions[pn].ConstantMs = ConstantMsChoices[rows[22].selected].value
 
 	-- Apply engine-level settings (PREFSMAN / SongOptions)
 	PREFSMAN:SetPreference("VisualDelaySeconds", GalaxyOptions[pn].VisualDelay / 1000)

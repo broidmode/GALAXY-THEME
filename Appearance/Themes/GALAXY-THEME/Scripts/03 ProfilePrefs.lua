@@ -30,6 +30,8 @@ local Defaults = {
 	VisualDelay    = 0,        -- ms offset for visual delay (-500..+500)
 	AudioSync      = 0,        -- ms offset for global audio sync (-500..+500)
 	Pitch          = 100,      -- music rate * 100 (100 = 1.00x)
+	ArrowVis       = 1,        -- index: 1=Normal 2=Constant
+	ConstantMs     = 1000,     -- millisecond visibility window for Constant mode (0-1000)
 	-- Music select cursor persistence
 	MusicSelectGroup   = "",   -- last opened group name
 	MusicSelectSongDir = "",   -- last selected song directory
@@ -113,6 +115,8 @@ local function LoadGalaxySettings(pn, dir)
 	if sec.VisualDelay    then opts.VisualDelay    = tonumber(sec.VisualDelay)    or Defaults.VisualDelay end
 	if sec.AudioSync      then opts.AudioSync      = tonumber(sec.AudioSync)      or Defaults.AudioSync end
 	if sec.Pitch          then opts.Pitch          = tonumber(sec.Pitch)          or Defaults.Pitch end
+	if sec.ArrowVis       then opts.ArrowVis       = tonumber(sec.ArrowVis)       or Defaults.ArrowVis end
+	if sec.ConstantMs     then opts.ConstantMs     = tonumber(sec.ConstantMs)     or Defaults.ConstantMs end
 	-- Music select cursor
 	if sec.MusicSelectGroup   then opts.MusicSelectGroup   = tostring(sec.MusicSelectGroup) end
 	if sec.MusicSelectSongDir then opts.MusicSelectSongDir = tostring(sec.MusicSelectSongDir) end
@@ -150,6 +154,8 @@ local function SaveGalaxySettings(pn, dir)
 			VisualDelay    = opts.VisualDelay    or Defaults.VisualDelay,
 			AudioSync      = opts.AudioSync      or Defaults.AudioSync,
 			Pitch          = opts.Pitch          or Defaults.Pitch,
+			ArrowVis       = opts.ArrowVis       or Defaults.ArrowVis,
+			ConstantMs     = opts.ConstantMs     or Defaults.ConstantMs,
 			-- Music select cursor
 			MusicSelectGroup   = opts.MusicSelectGroup   or Defaults.MusicSelectGroup,
 			MusicSelectSongDir = opts.MusicSelectSongDir or Defaults.MusicSelectSongDir,
