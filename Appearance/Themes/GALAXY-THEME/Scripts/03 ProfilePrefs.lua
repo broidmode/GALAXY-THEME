@@ -15,6 +15,7 @@ local Defaults = {
 	Turn           = 1,
 	Scroll         = 1,
 	Gauge          = "Normal",
+	Fail           = 1,        -- index: 1=Gauge 2=Never 3=Miss
 	NoteSkin       = "",       -- empty = engine default
 	Accel          = 1,        -- index: 1=Normal 2=Boost 3=Brake 4=Wave
 	LaneCover      = 1,        -- index: 1=Off 2=Hidden+ 3=Sudden+ 4=HidSud+
@@ -62,6 +63,7 @@ local function LoadGalaxySettings(pn, dir)
 	if sec.Turn       then opts.Turn       = tonumber(sec.Turn) or Defaults.Turn end
 	if sec.Scroll     then opts.Scroll     = tonumber(sec.Scroll) or Defaults.Scroll end
 	if sec.Gauge      then opts.Gauge      = tostring(sec.Gauge) end
+	if sec.Fail       then opts.Fail       = tonumber(sec.Fail)       or Defaults.Fail end
 	if sec.NoteSkin       then opts.NoteSkin       = tostring(sec.NoteSkin) end
 	if sec.Accel          then opts.Accel          = tonumber(sec.Accel)          or Defaults.Accel end
 	if sec.LaneCover      then opts.LaneCover      = tonumber(sec.LaneCover)      or Defaults.LaneCover end
@@ -95,6 +97,7 @@ local function SaveGalaxySettings(pn, dir)
 			Turn           = opts.Turn           or Defaults.Turn,
 			Scroll         = opts.Scroll         or Defaults.Scroll,
 			Gauge          = opts.Gauge          or Defaults.Gauge,
+			Fail           = opts.Fail           or Defaults.Fail,
 			NoteSkin       = opts.NoteSkin       or Defaults.NoteSkin,
 			Accel          = opts.Accel          or Defaults.Accel,
 			LaneCover      = opts.LaneCover      or Defaults.LaneCover,

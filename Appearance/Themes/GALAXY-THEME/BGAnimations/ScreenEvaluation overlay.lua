@@ -162,7 +162,9 @@ local function MakePlayerPanel(pn)
 		HitMine = pss:GetTapNoteScores("TapNoteScore_HitMine"),
 	}
 
-	local failed   = pss:GetFailed()
+	-- Use our gauge state for failed detection (engine life bar is neutralized)
+	local gs_fail  = GaugeState and GaugeState[pn]
+	local failed   = (gs_fail and gs_fail.failed) or false
 	local ddrScore = GetDisplayScore(pn)
 	local grade    = GetCurrentGrade(pn)
 	local exRaw    = GetEXRaw(pn)

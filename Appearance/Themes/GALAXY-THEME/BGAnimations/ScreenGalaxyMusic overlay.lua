@@ -188,6 +188,12 @@ local GaugeChoices = {
 	{ label = "Risky",      value = "Risky" },
 }
 
+local FailChoices = {
+	{ label = "Gauge", value = "Gauge" },
+	{ label = "Never", value = "Never" },
+	{ label = "Miss",  value = "Miss" },
+}
+
 local AccelChoices = {
 	{ label = "Normal", mod = "" },
 	{ label = "Boost",  mod = "Boost" },
@@ -247,7 +253,7 @@ local JudgePositionChoices = {
 	{ label = "Far",  value = "Far" },
 }
 
-local NUM_OPTION_ROWS = 16
+local NUM_OPTION_ROWS = 17
 
 -- Helper: find index in a choices array where c[field] == val
 local function FindChoiceIdx(choices, field, val, fallback)
@@ -288,6 +294,8 @@ local function BuildOptionRowsForPlayer(pn)
 	end
 	local gaugeIdx = FindChoiceIdx(GaugeChoices, "value", gauge, 1)
 
+	local fail     = opts.Fail           or 1
+
 	-- NoteSkin: build choices dynamically from engine
 	local nsNames = NOTESKIN:GetNoteSkinNames()
 	local nsChoices = {}
@@ -318,6 +326,7 @@ local function BuildOptionRowsForPlayer(pn)
 		{ name = "Turn",      choices = TurnChoices,          selected = math.max(1, math.min(turn, #TurnChoices)) },
 		{ name = "Scroll",    choices = ScrollChoices,        selected = math.max(1, math.min(scroll, #ScrollChoices)) },
 		{ name = "Gauge",     choices = GaugeChoices,         selected = gaugeIdx },
+		{ name = "Fail",      choices = FailChoices,          selected = math.max(1, math.min(fail, #FailChoices)) },
 		{ name = "NoteSkin",  choices = nsChoices,            selected = nsIdx },
 		{ name = "Accel",     choices = AccelChoices,         selected = math.max(1, math.min(accel, #AccelChoices)) },
 		{ name = "Cover",     choices = LaneCoverChoices,     selected = math.max(1, math.min(cover, #LaneCoverChoices)) },
@@ -502,51 +511,54 @@ local function ApplyMenuOptions(pn)
 	-- Gauge: store in global table for GaugeState to read
 	GalaxyOptions[pn].Gauge = GaugeChoices[rows[5].selected].value
 
+	-- Fail (row 6): when the song auto-fails
+	GalaxyOptions[pn].Fail = rows[6].selected
+
 	-- Turn/Scroll indices stored in GalaxyOptions for profile save
 	GalaxyOptions[pn].Turn   = rows[3].selected
 	GalaxyOptions[pn].Scroll = rows[4].selected
 
-	-- NoteSkin (row 6)
-	local nsValue = rows[6].choices[rows[6].selected].value
+	-- NoteSkin (row 7)
+	local nsValue = rows[7].choices[rows[7].selected].value
 	local po = GAMESTATE:GetPlayerState(pn):GetPlayerOptions("ModsLevel_Preferred")
 	po:NoteSkin(nsValue)
 	GalaxyOptions[pn].NoteSkin = nsValue
 
-	-- Accel (row 7): clear all acceleration mods, then apply selected
+	-- Accel (row 8): clear all acceleration mods, then apply selected
 	GAMESTATE:ApplyPreferredModifiers(pn, "no boost,no brake,no wave")
-	local accelMod = AccelChoices[rows[7].selected].mod
+	local accelMod = AccelChoices[rows[8].selected].mod
 	if accelMod ~= "" then
 		GAMESTATE:ApplyPreferredModifiers(pn, accelMod)
 	end
-	GalaxyOptions[pn].Accel = rows[7].selected
+	GalaxyOptions[pn].Accel = rows[8].selected
 
-	-- Lane Cover (row 8): save type (drawing handled in gameplay overlay)
+	-- Lane Cover (row 9): save type (drawing handled in gameplay overlay)
 	GAMESTATE:ApplyPreferredModifiers(pn, "no hidden,no sudden")
-	GalaxyOptions[pn].LaneCover = rows[8].selected
+	GalaxyOptions[pn].LaneCover = rows[9].selected
 
-	-- Cover % (row 9): save percentage index
-	GalaxyOptions[pn].CoverPercent = rows[9].selected
+	-- Cover % (row 10): save percentage index
+	GalaxyOptions[pn].CoverPercent = rows[10].selected
 
-	-- Lane Visibility (row 10): theme-level setting for gameplay overlay
-	GalaxyOptions[pn].LaneVis = rows[10].selected
+	-- Lane Visibility (row 11): theme-level setting for gameplay overlay
+	GalaxyOptions[pn].LaneVis = rows[11].selected
 
-	-- Guideline (row 11): theme-level setting
-	GalaxyOptions[pn].Guideline = rows[11].selected
+	-- Guideline (row 12): theme-level setting
+	GalaxyOptions[pn].Guideline = rows[12].selected
 
-	-- Step Zone (row 12): theme-level setting
-	GalaxyOptions[pn].StepZone = rows[12].selected
+	-- Step Zone (row 13): theme-level setting
+	GalaxyOptions[pn].StepZone = rows[13].selected
 
-	-- Fast/Slow (row 13): theme-level setting
-	GalaxyOptions[pn].FastSlow = rows[13].selected
+	-- Fast/Slow (row 14): theme-level setting
+	GalaxyOptions[pn].FastSlow = rows[14].selected
 
-	-- Combo Priority (row 14): theme-level setting
-	GalaxyOptions[pn].ComboPriority = rows[14].selected
+	-- Combo Priority (row 15): theme-level setting
+	GalaxyOptions[pn].ComboPriority = rows[15].selected
 
-	-- Judge Priority (row 15): theme-level setting
-	GalaxyOptions[pn].JudgePriority = rows[15].selected
+	-- Judge Priority (row 16): theme-level setting
+	GalaxyOptions[pn].JudgePriority = rows[16].selected
 
-	-- Judge Position (row 16): theme-level setting
-	GalaxyOptions[pn].JudgePosition = rows[16].selected
+	-- Judge Position (row 17): theme-level setting
+	GalaxyOptions[pn].JudgePosition = rows[17].selected
 end
 
 local function RefreshMenu(pn)

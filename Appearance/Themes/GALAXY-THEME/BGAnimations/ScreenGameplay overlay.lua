@@ -65,8 +65,15 @@ t[#t+1] = Def.Actor{
 		local pn = params.Player
 		if not pn then return end
 
-		UpdateScore(params, pn)
 		UpdateGauge(params, pn)
+
+		-- When Fail is "Never" and gauge is depleted, freeze the score
+		local failMode = (GalaxyOptions[pn] or {}).Fail or 1
+		local gaugeDead = (failMode == 2) and GetGaugeFailed(pn)
+
+		if not gaugeDead then
+			UpdateScore(params, pn)
+		end
 
 		-- Broadcast score update for HUD
 		MESSAGEMAN:Broadcast("GalaxyScoreChanged", {
@@ -75,8 +82,28 @@ t[#t+1] = Def.Actor{
 			EXPercent = GetEXPercent(pn),
 		})
 
-		-- Handle fail
-		if GetGaugeFailed(pn) then
+		-- Handle fail based on Fail setting
+		local failMode = (GalaxyOptions[pn] or {}).Fail or 1  -- 1=Gauge,2=Never,3=Miss
+		local shouldFail = false
+
+		if failMode == 1 then
+			-- Gauge: fail when gauge is depleted
+			shouldFail = GetGaugeFailed(pn)
+		elseif failMode == 3 then
+			-- Miss: fail on any miss or dropped hold
+			local tns = params.TapNoteScore
+			local hns = params.HoldNoteScore
+			if tns == 'TapNoteScore_Miss' then
+				shouldFail = true
+			elseif hns == 'HoldNoteScore_LetGo' then
+				shouldFail = true
+			end
+		end
+		-- failMode == 2 (Never): never trigger fail
+
+		if shouldFail then
+			-- Mark gauge as failed so evaluation/chart results see it
+			if GaugeState[pn] then GaugeState[pn].failed = true end
 			local screen = SCREENMAN:GetTopScreen()
 			if screen then
 				screen:PostScreenMessage('SM_BeginFailed', 0)
