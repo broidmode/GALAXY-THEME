@@ -39,6 +39,28 @@ local Defaults = {
 -- Ensure GalaxyOptions global exists
 GalaxyOptions = GalaxyOptions or {}
 
+-- Called by metrics.ini [Player] TapJudgmentsUnderField / HoldJudgmentsUnderField.
+-- Evaluated at Player::Init() time (each ScreenGameplay init), after profiles load.
+-- Returns true when ANY joined player has JudgePriority == 1 (Low → behind notes).
+-- Same pattern as DDR-A3’s ComboUnderField() function.
+function IsJudgmentUnderField()
+	local result = true  -- default: under field (Low)
+	if GalaxyOptions then
+		local anyHigh = false
+		for k, opts in pairs(GalaxyOptions) do
+			if type(opts) == "table" then
+				Trace("GALAXY IsJudgmentUnderField: key=" .. tostring(k) .. " JudgePriority=" .. tostring(opts.JudgePriority))
+				if opts.JudgePriority == 2 then
+					anyHigh = true
+				end
+			end
+		end
+		if anyHigh then result = false end
+	end
+	Trace("GALAXY IsJudgmentUnderField => " .. tostring(result))
+	return result
+end
+
 local function EnsurePlayerOptions(pn)
 	if not GalaxyOptions[pn] then
 		GalaxyOptions[pn] = {}

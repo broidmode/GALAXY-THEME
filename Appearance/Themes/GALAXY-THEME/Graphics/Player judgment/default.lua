@@ -1,5 +1,7 @@
 -- GALAXY Player judgment — custom judgment + fast/slow sprites
--- Reads GalaxyOptions[pn] for FastSlow, Scroll (reverse), JudgePosition, JudgePriority
+-- Reads GalaxyOptions[pn] for FastSlow, Scroll (reverse), JudgePosition
+-- Draw layering is controlled by [Player] TapJudgmentsUnderField metric,
+-- which calls IsJudgmentUnderField() → reads JudgePriority from GalaxyOptions.
 
 local player = Var "Player"
 
@@ -66,19 +68,7 @@ t[#t+1] = Def.ActorFrame{
 		c = self:GetChildren()
 	end,
 
-	-- ===== JUDGMENT SPRITE (drawn first = behind fast/slow) =====
-	LoadActor("Judgment") .. {
-		Name = "Judgment",
-		InitCommand = function(self)
-			self:pause():visible(false):draworder(-1)
-		end,
-		OnCommand = function(self)
-			self:y(GetJudgeY())
-		end,
-		ResetCommand = cmd(finishtweening;stopeffect;visible,false),
-	},
-
-	-- ===== FAST / SLOW INDICATOR (drawn second = in front of judgment) =====
+	-- ===== FAST / SLOW INDICATOR =====
 	LoadActor("FastSlow") .. {
 		InitCommand = function(self)
 			self:diffusealpha(0):animate(false)
@@ -110,6 +100,18 @@ t[#t+1] = Def.ActorFrame{
 				:linear(0.05):zoom(FS_SCALE)
 				:sleep(0.4):diffusealpha(0)
 		end,
+	},
+
+	-- ===== JUDGMENT SPRITE =====
+	LoadActor("Judgment") .. {
+		Name = "Judgment",
+		InitCommand = function(self)
+			self:pause():visible(false)
+		end,
+		OnCommand = function(self)
+			self:y(GetJudgeY())
+		end,
+		ResetCommand = cmd(finishtweening;stopeffect;visible,false),
 	},
 
 	-- ===== JUDGMENT MESSAGE HANDLER =====
