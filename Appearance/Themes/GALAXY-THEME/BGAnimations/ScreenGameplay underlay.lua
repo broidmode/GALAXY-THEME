@@ -83,6 +83,20 @@ for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
 			end,
 		}
 	end
+	-- ===== STEP ZONE (receptor visibility via Dark mod) =====
+	-- StepZone: 1=On (show receptors), 2=Off (hide receptors)
+	local stepZone = opts.StepZone or 1
+	if stepZone == 2 then
+		t[#t+1] = Def.Actor{
+			Name = "StepZoneOff_" .. ToEnumShortString(pn),
+			OnCommand = function(self)
+				GAMESTATE:GetPlayerState(pn)
+					:GetPlayerOptions("ModsLevel_Song"):Dark(1)
+				GAMESTATE:GetPlayerState(pn)
+					:GetPlayerOptions("ModsLevel_Current"):Dark(1)
+			end,
+		}
+	end
 end
 
 return t
