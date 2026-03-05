@@ -24,11 +24,12 @@ local GaugeBarColors = {
 local GaugeDangerColor = color("#8F8F8F")  -- gray when in danger
 local GaugeFailColor   = color("#ff2222")  -- red on fail
 
--- Bar dimensions and position (similar to A3: top of screen, near notefield)
-local BAR_W      = 300
-local BAR_H      = 18
-local BAR_Y      = 24     -- from top of screen
+-- Bar dimensions and position
+local BAR_H      = 54
+local BAR_Y      = 36     -- from top of screen
 local BAR_BORDER = 2
+local SMOKE_SPEED = 2000    -- pixels/sec for the smoke scroll
+local EDGE_FADE   = 1/32  -- fraction of width to fade at L/R edges (matches lane filter)
 
 -- Get the gauge key string for color lookup
 local function GetGaugeColorKey(pn)
@@ -148,6 +149,7 @@ for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
 				self:zoomto(coverW, coverH)
 					:diffuse(color("#000000"))
 					:diffusealpha(1)
+					:fadeleft(EDGE_FADE):faderight(EDGE_FADE)
 					:visible(false)
 			end,
 			OnCommand = function(self)
@@ -169,6 +171,7 @@ for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
 				self:zoomto(coverW, coverH)
 					:diffuse(color("#000000"))
 					:diffusealpha(1)
+					:fadeleft(EDGE_FADE):faderight(EDGE_FADE)
 					:visible(false)
 			end,
 			OnCommand = function(self)
@@ -379,7 +382,7 @@ for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
 		Def.Quad{
 			Name = "ConstantSolid_" .. ToEnumShortString(pn),
 			InitCommand = function(self)
-				self:diffuse(color("#000000")):visible(false)
+				self:diffuse(color("#000000")):fadeleft(EDGE_FADE):faderight(EDGE_FADE):visible(false)
 			end,
 		},
 
@@ -387,7 +390,7 @@ for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
 		Def.Quad{
 			Name = "ConstantFade_" .. ToEnumShortString(pn),
 			InitCommand = function(self)
-				self:visible(false)
+				self:fadeleft(EDGE_FADE):faderight(EDGE_FADE):visible(false)
 			end,
 		},
 	}
@@ -684,84 +687,219 @@ end
 -- ===== HUD ELEMENTS (per player) =====
 for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
 	local isP1 = (pn == PLAYER_1)
-	-- Bar X: left side for P1, right side for P2 (similar to A3's cx±231)
-	local barX = isP1 and (SCREEN_CENTER_X - 231) or (SCREEN_CENTER_X + 231)
-	-- Score text
-	local scoreX = isP1 and 40 or (SCREEN_WIDTH - 40)
-	local sideSign = isP1 and 1 or -1
+	local shortPN = ToEnumShortString(pn)
 
-	-- ===== LIFE BAR =====
+	-- Derive play-area width from style (same formula as lane covers)
+	local style   = GAMESTATE:GetCurrentStyle(pn)
+	local numCols = style:ColumnsPerPlayer()
+	local styleW  = style:GetWidth(pn)
+	local playW   = styleW * (numCols / 1.7)
+
+	-- Score/EX positioning: bottom of the play area, inset from edges
+	local scoreX    = isP1 and 40 or (SCREEN_WIDTH - 40)
+	local scoreY    = SCREEN_HEIGHT - 40
+	local exY       = SCREEN_HEIGHT - 18
+	local sideSign  = isP1 and 1 or -1
+
+	-- ===== LIFE BAR (spans player's play area) =====
 	-- Background (dark track)
 	t[#t+1] = Def.Quad{
-		Name = "BarBorder_" .. ToEnumShortString(pn),
+		Name = "BarBorder_" .. shortPN,
 		InitCommand = function(self)
-			self:xy(barX, BAR_Y)
-				:zoomto(BAR_W + BAR_BORDER*2, BAR_H + BAR_BORDER*2)
+			self:y(BAR_Y)
+				:zoomto(playW + BAR_BORDER*2, BAR_H + BAR_BORDER*2)
 				:diffuse(color("#222233"))
+				:fadeleft(EDGE_FADE):faderight(EDGE_FADE)
+		end,
+		OnCommand = function(self)
+			local screen = SCREENMAN:GetTopScreen()
+			local pp = screen and screen:GetChild("Player" .. shortPN)
+			self:x(pp and pp:GetX() or SCREEN_CENTER_X)
 		end,
 	}
 	-- Empty track
 	t[#t+1] = Def.Quad{
-		Name = "BarTrack_" .. ToEnumShortString(pn),
+		Name = "BarTrack_" .. shortPN,
 		InitCommand = function(self)
-			self:xy(barX, BAR_Y)
-				:zoomto(BAR_W, BAR_H)
+			self:y(BAR_Y)
+				:zoomto(playW, BAR_H)
 				:diffuse(color("#0a0a12"))
+				:fadeleft(EDGE_FADE):faderight(EDGE_FADE)
+		end,
+		OnCommand = function(self)
+			local screen = SCREENMAN:GetTopScreen()
+			local pp = screen and screen:GetChild("Player" .. shortPN)
+			self:x(pp and pp:GetX() or SCREEN_CENTER_X)
 		end,
 	}
-	-- Fill bar (left-aligned within the track)
-	t[#t+1] = Def.Quad{
-		Name = "BarFill_" .. ToEnumShortString(pn),
-		InitCommand = function(self)
-			self:xy(barX - BAR_W/2, BAR_Y)
-				:halign(0)
-				:zoomto(BAR_W, BAR_H)
-				:diffuse(color("#22cc44"))
+	-- Fill bar: two side-by-side copies of the smoke PNG inside a clipped
+	-- ActorFrame.  The frame is sized to playW × BAR_H and masks overflow
+	-- via aux-clipping.  Both sprites scroll right continuously; when one
+	-- exits the right edge it teleports to the left, creating a seamless loop.
+	-- Life % is controlled by zooming the frame width (not the sprites).
+	do  -- scope block for locals
+	local barLife = 1
+	local barColor = color("#22cc44")
+	local barPx = SCREEN_CENTER_X  -- will be set in OnCommand
+
+	t[#t+1] = Def.ActorFrame{
+		Name = "BarFillFrame_" .. shortPN,
+		OnCommand = function(self)
+			Trace("[BAR-DBG] BarFillFrame OnCommand START for " .. shortPN)
+			local screen = SCREENMAN:GetTopScreen()
+			local pp = screen and screen:GetChild("Player" .. shortPN)
+			barPx = pp and pp:GetX() or SCREEN_CENTER_X
+			self:xy(barPx - playW/2, BAR_Y)
+			Trace("[BAR-DBG] BarFillFrame pos: x=" .. tostring(barPx - playW/2) .. " y=" .. tostring(BAR_Y) .. " playW=" .. tostring(playW))
+
+			-- Attach per-frame update HERE, where self is the frame
+			local sprA = self:GetChild("SmokeA")
+			local sprB = self:GetChild("SmokeB")
+			Trace("[BAR-DBG] sprA=" .. tostring(sprA) .. " sprB=" .. tostring(sprB))
+			if not sprA or not sprB then
+				Trace("[BAR-DBG] ERROR: could not find SmokeA/SmokeB children!")
+				return
+			end
+
+			local offset = 0
+			local frameCount = 0
+			self:SetUpdateFunction(function(fr, dt)
+				offset = offset + SMOKE_SPEED * dt
+				if offset >= playW then offset = offset - playW end
+
+				local axPos = -offset
+				local bxPos = -offset + playW
+				sprA:x(axPos)
+				sprB:x(bxPos)
+
+				sprA:diffuse(barColor)
+				sprB:diffuse(barColor)
+
+				local fillW = barLife * playW
+				for _, pair in ipairs({{sprA, axPos}, {sprB, bxPos}}) do
+					local spr, sx = pair[1], pair[2]
+					-- Left crop: hide portion that extends past x=0
+					if sx < 0 then
+						spr:cropleft(-sx / playW)
+					else
+						spr:cropleft(0)
+					end
+					-- Right crop: hide portion past the life-fill boundary
+					if sx >= fillW then
+						spr:cropright(1)
+					elseif sx + playW <= fillW then
+						spr:cropright(0)
+					else
+						spr:cropright(1 - (fillW - sx) / playW)
+					end
+				end
+
+				frameCount = frameCount + 1
+				if frameCount == 1 or frameCount == 60 then
+					Trace("[BAR-DBG] UpdateFn frame=" .. frameCount .. " offset=" .. string.format("%.1f", offset) .. " barLife=" .. string.format("%.3f", barLife) .. " fillW=" .. string.format("%.1f", fillW))
+					Trace("[BAR-DBG] barColor r=" .. string.format("%.2f", barColor[1]) .. " g=" .. string.format("%.2f", barColor[2]) .. " b=" .. string.format("%.2f", barColor[3]))
+				end
+			end)
+			Trace("[BAR-DBG] SetUpdateFunction attached OK")
 		end,
 		DoneLoadingNextSongMessageCommand = function(self)
-			-- Set initial color based on gauge type
 			local key = GetGaugeColorKey(pn)
-			local c = GaugeBarColors[key] or GaugeBarColors.Normal
-			self:diffuse(c)
+			barColor = GaugeBarColors[key] or GaugeBarColors.Normal
+			Trace("[BAR-DBG] DoneLoadingNextSong: key=" .. tostring(key) .. " barColor set")
 		end,
 		GalaxyLifeChangedMessageCommand = function(self, params)
 			if params.Player ~= pn then return end
 			if params.Failed then
-				self:stoptweening():linear(0.2)
-					:zoomto(0, BAR_H)
-					:diffuse(GaugeFailColor)
+				barLife = 0
+				barColor = GaugeFailColor
+				Trace("[BAR-DBG] GalaxyLifeChanged: FAILED")
 				return
 			end
-			-- Battery modes: map lives to bar width
 			local life = params.Life or 0
 			local gType = params.GaugeType
 			if gType == "LIFE4" or gType == "Risky" then
 				local maxL = params.MaxLives or 1
 				life = maxL > 0 and (params.Life / maxL) or 0
 			end
-			local fillW = math.max(0, math.min(1, life)) * BAR_W
+			barLife = math.max(0, math.min(1, life))
 
-			-- Color: use gauge color, but shift to gray in danger
 			local key = GetGaugeColorKey(pn)
-			local c = GaugeBarColors[key] or GaugeBarColors.Normal
-			if life < 0.2 then
-				c = GaugeDangerColor
+			barColor = GaugeBarColors[key] or GaugeBarColors.Normal
+			if barLife < 0.2 then
+				barColor = GaugeDangerColor
 			end
-
-			self:stoptweening():linear(0.05)
-				:zoomto(fillW, BAR_H)
-				:diffuse(c)
+			Trace("[BAR-DBG] GalaxyLifeChanged: life=" .. string.format("%.3f", barLife) .. " key=" .. tostring(key))
 		end,
+
+		-- Sprite A
+		Def.Sprite{
+			Name = "SmokeA",
+			Texture = "../Graphics/bar-smoke.png",
+			OnCommand = function(self)
+				self:halign(0):valign(0.5)
+				self:zoomto(playW, BAR_H)
+				self:x(0)
+				self:diffuse(barColor)
+				Trace("[BAR-DBG] SmokeA OnCommand: zoomto(" .. tostring(playW) .. "," .. tostring(BAR_H) .. ")")
+			end,
+		},
+		-- Sprite B (starts immediately to the right of A)
+		Def.Sprite{
+			Name = "SmokeB",
+			Texture = "../Graphics/bar-smoke.png",
+			OnCommand = function(self)
+				self:halign(0):valign(0.5)
+				self:zoomto(playW, BAR_H)
+				self:x(playW)
+				self:diffuse(barColor)
+				Trace("[BAR-DBG] SmokeB OnCommand: x=" .. tostring(playW))
+			end,
+		},
+
+		-- Edge fade masks: fixed quads on top of smoke that darken edges
+		-- to the track color, creating a smooth fade at left/right bar boundaries.
+		Def.Quad{
+			Name = "FadeMaskL",
+			InitCommand = function(self)
+				local fadeW = EDGE_FADE * playW
+				self:halign(0):valign(0.5)
+				self:zoomto(fadeW, BAR_H)
+				self:x(0)
+				local tc = color("#0a0a12")      -- track color, opaque
+				local t0 = {tc[1],tc[2],tc[3],0}  -- same color, transparent
+				self:diffuseupperleft(tc):diffuselowerleft(tc)
+					:diffuseupperright(t0):diffuselowerright(t0)
+			end,
+		},
+		Def.Quad{
+			Name = "FadeMaskR",
+			InitCommand = function(self)
+				local fadeW = EDGE_FADE * playW
+				self:halign(1):valign(0.5)
+				self:zoomto(fadeW, BAR_H)
+				self:x(playW)
+				local tc = color("#0a0a12")
+				local t0 = {tc[1],tc[2],tc[3],0}
+				self:diffuseupperleft(t0):diffuselowerleft(t0)
+					:diffuseupperright(tc):diffuselowerright(tc)
+			end,
+		},
 	}
+	end  -- scope block
 
 	-- Gauge type label (small text below the bar)
 	t[#t+1] = Def.Text{ Font = RodinPath("db"), Size = FontS("db"), Text = "",
-		Name = "GaugeLabel_" .. ToEnumShortString(pn),
+		Name = "GaugeLabel_" .. shortPN,
 		InitCommand = function(self)
-			self:xy(barX, BAR_Y + BAR_H/2 + 12)
+			self:y(BAR_Y + BAR_H/2 + 12)
 				:zoom(FONT_ZOOM):diffuse(color("#aaaaaa"))
 			self:shadowlength(0)
 			self:SetTextureFiltering(false)
+		end,
+		OnCommand = function(self)
+			local screen = SCREENMAN:GetTopScreen()
+			local pp = screen and screen:GetChild("Player" .. shortPN)
+			self:x(pp and pp:GetX() or SCREEN_CENTER_X)
 		end,
 		DoneLoadingNextSongMessageCommand = function(self)
 			self:settext(GetGaugeDisplayName(pn)):Regen()
@@ -777,12 +915,17 @@ for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
 
 	-- Life percentage text (overlaid on bar)
 	t[#t+1] = Def.Text{ Font = RodinPath("db"), Size = FontS("db"), Text = "",
-		Name = "BarPct_" .. ToEnumShortString(pn),
+		Name = "BarPct_" .. shortPN,
 		InitCommand = function(self)
-			self:xy(barX, BAR_Y)
+			self:y(BAR_Y)
 				:zoom(FONT_ZOOM):diffuse(Color.White)
 			self:shadowlength(0)
 			self:SetTextureFiltering(false)
+		end,
+		OnCommand = function(self)
+			local screen = SCREENMAN:GetTopScreen()
+			local pp = screen and screen:GetChild("Player" .. shortPN)
+			self:x(pp and pp:GetX() or SCREEN_CENTER_X)
 		end,
 		GalaxyLifeChangedMessageCommand = function(self, params)
 			if params.Player ~= pn then return end
@@ -795,17 +938,17 @@ for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
 				local lives = math.floor(params.Life)
 				self:settext(lives .. " / " .. (params.MaxLives or 0)):Regen()
 			else
-				local pct = math.floor((params.Life or 0) * 100 + 0.5)
-				self:settext(pct .. "%"):Regen()
+				local pct = (params.Life or 0) * 100
+				self:settext(string.format("%.2f%%", pct)):Regen()
 			end
 		end,
 	}
 
-	-- Score display
+	-- Score display (bottom of play area)
 	t[#t+1] = Def.Text{ Font = RodinPath("db"), Size = FontL("db"), Text = "",
-		Name = "Score_" .. ToEnumShortString(pn),
+		Name = "Score_" .. shortPN,
 		InitCommand = function(self)
-			self:xy(scoreX, BAR_Y)
+			self:xy(scoreX, scoreY)
 				:zoom(FONT_ZOOM):diffuse(Color.White)
 			self:halign(isP1 and 0 or 1):settext("0"):Regen():shadowlength(0)
 			self:SetTextureFiltering(false)
@@ -817,11 +960,11 @@ for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
 		end,
 	}
 
-	-- EX Score display
+	-- EX Score display (below score, at very bottom)
 	t[#t+1] = Def.Text{ Font = RodinPath("db"), Size = FontS("db"), Text = "",
-		Name = "EX_" .. ToEnumShortString(pn),
+		Name = "EX_" .. shortPN,
 		InitCommand = function(self)
-			self:xy(scoreX, BAR_Y + 24)
+			self:xy(scoreX, exY)
 				:zoom(FONT_ZOOM):diffuse(color("#aaaaff"))
 			self:halign(isP1 and 0 or 1):settext("EX 0.00%"):Regen():shadowlength(0)
 			self:SetTextureFiltering(false)
@@ -833,11 +976,11 @@ for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
 		end,
 	}
 
-	-- Grade display
+	-- Grade display (bottom, near score)
 	t[#t+1] = Def.Text{ Font = RodinPath("db"), Size = FontM("db"), Text = "",
-		Name = "Grade_" .. ToEnumShortString(pn),
+		Name = "Grade_" .. shortPN,
 		InitCommand = function(self)
-			self:xy(scoreX + sideSign * 120, BAR_Y)
+			self:xy(scoreX + sideSign * 120, scoreY)
 				:zoom(FONT_ZOOM):diffuse(color("#ffcc00"))
 			self:halign(0.5):shadowlength(0)
 			self:SetTextureFiltering(false)
