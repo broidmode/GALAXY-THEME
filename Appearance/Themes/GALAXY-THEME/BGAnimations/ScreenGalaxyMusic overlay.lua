@@ -49,6 +49,9 @@ local CardByFlat   = {}    -- CardByFlat[flatIdx] = poolIdx (reverse lookup)
 -- this flag tells the per-frame update to schedule another Refresh pass.
 local DeferredLoadPending = false
 
+-- Forward declaration (defined later, used by CloseMenu)
+local Refresh
+
 -- ===== ANIMATION STATE =====
 local VisualOffset = 0     -- current pixel offset (ActorFrame y-shift)
 local AnimActive   = false
@@ -77,17 +80,17 @@ local _confirmDirty = {}   -- _confirmDirty[pn] = true if L/R pressed during hol
 
 -- Fast-step sizes when confirm is held + L/R per row index (nil = normal step)
 local FAST_STEP = {
-	[2] = 10,  -- Speed: jump 10 choices per press (100 BPM or x0.50)
-	[18] = 10, -- Visual Delay: jump 10 choices (50ms) per press
-	[19] = 10, -- Audio Sync: jump 10 choices (50ms) per press
-	[20] = 10, -- Pitch: jump 10 choices (0.50x) per press
+	[3] = 10,  -- Speed: jump 10 choices per press (100 BPM or x0.50)
+	[19] = 10, -- Visual Delay: jump 10 choices (50ms) per press
+	[20] = 10, -- Audio Sync: jump 10 choices (50ms) per press
+	[21] = 10, -- Pitch: jump 10 choices (0.50x) per press
 }
 
 -- Special fast-jump targets for specific rows (by row index)
 -- When confirm-held, L jumps to first target, R jumps to second target
 -- These are looked up by value field in the row's choices
 local FAST_JUMP = {
-	[5] = { left = "Normal", right = "Risky" },  -- Gauge: L=Normal, R=Risky
+	[6] = { left = "Normal", right = "Risky" },  -- Gauge: L=Normal, R=Risky
 }
 
 -- ===== DIFFICULTY PICKER STATE =====
@@ -105,6 +108,16 @@ local DiffColors = {
 	Difficulty_Hard      = color("#32eb19"),
 	Difficulty_Challenge = color("#eb1eff"),
 	Difficulty_Edit      = color("#afafaf"),
+}
+
+-- Difficulty choices for the side menu (maps to engine Difficulty enums)
+local DifficultyChoices = {
+	{ label = "Beginner",  value = "Difficulty_Beginner" },
+	{ label = "Easy",      value = "Difficulty_Easy" },
+	{ label = "Medium",    value = "Difficulty_Medium" },
+	{ label = "Hard",      value = "Difficulty_Hard" },
+	{ label = "Challenge", value = "Difficulty_Challenge" },
+	{ label = "Edit",      value = "Difficulty_Edit" },
 }
 
 -- Flare tint colors for song card backgrounds.
@@ -125,14 +138,12 @@ local FlareTintColors = {
 }
 
 -- Return the flare tint color (with alpha) for a song card, or nil if no tint.
--- Uses the first enabled player's preferred difficulty to find the right chart.
--- Falls back to the best flare result across all available difficulties.
+-- Only shows tint for the player's preferred (selected) difficulty.
 local function GetFlareTintForCard(song, stepsArray)
 	if not song then return nil end
 	local pn = GAMESTATE:GetEnabledPlayers()[1]
 	if not pn then return nil end
 
-	-- Try preferred difficulty first
 	local prefDiff = GAMESTATE:GetPreferredDifficulty(pn)
 	local style = GAMESTATE:GetCurrentStyle()
 	if prefDiff and style then
@@ -147,27 +158,6 @@ local function GetFlareTintForCard(song, stepsArray)
 					return { base[1], base[2], base[3], FLARE_TINT_ALPHA }
 				end
 			end
-		end
-	end
-
-	-- Fallback: scan all available steps for the best flare result
-	if stepsArray then
-		local bestStrength = 0
-		local bestColor = nil
-		for i = 2, #stepsArray do
-			local chartKey = GetChartKey(song, stepsArray[i])
-			local cr = chartKey and GetChartResult(pn, chartKey)
-			if cr and cr.flareGauge and FlareTintColors[cr.flareGauge] then
-				local str = ({ Flare1=1, Flare2=2, Flare3=3, Flare4=4, Flare5=5,
-					Flare6=6, Flare7=7, Flare8=8, Flare9=9, FlareEX=10 })[cr.flareGauge] or 0
-				if str > bestStrength then
-					bestStrength = str
-					bestColor = FlareTintColors[cr.flareGauge]
-				end
-			end
-		end
-		if bestColor then
-			return { bestColor[1], bestColor[2], bestColor[3], FLARE_TINT_ALPHA }
 		end
 	end
 
@@ -443,7 +433,14 @@ local function BuildOptionRowsForPlayer(pn)
 	local constms    = opts.ConstantMs or 1000
 	local constmsIdx = FindClosestIdx(ConstantMsChoices, constms)
 
+	-- Determine current preferred difficulty for the Difficulty row
+	local prefDiff = GAMESTATE:GetPreferredDifficulty(pn)
+	local diffStr = prefDiff and ToEnumShortString(prefDiff) or "Hard"
+	local diffIdx = FindChoiceIdx(DifficultyChoices, "value",
+		prefDiff and ("Difficulty_" .. diffStr) or "Difficulty_Hard", 4)
+
 	return {
+		{ name = "Difficulty", choices = DifficultyChoices,    selected = diffIdx },
 		{ name = "Mode",      choices = SpeedModes,          selected = modeIdx },
 		{ name = "Speed",     choices = speedChoices,         selected = speedIdx },
 		{ name = "Turn",      choices = TurnChoices,          selected = math.max(1, math.min(turn, #TurnChoices)) },
@@ -470,12 +467,12 @@ local function BuildOptionRowsForPlayer(pn)
 end
 
 -- Save the current speed row value to GalaxyOptions immediately.
--- Called whenever the speed value (row 2) or mode (row 1) changes.
+-- Called whenever the speed value (row 3) or mode (row 2) changes.
 local function SaveSpeedValueNow(pn)
 	local rows = PlayerOptionRows[pn]
 	if not rows then return end
-	local mode = SpeedModes[rows[1].selected].value
-	local val  = rows[2].choices[rows[2].selected]
+	local mode = SpeedModes[rows[2].selected].value
+	local val  = rows[3].choices[rows[3].selected]
 	if not val then return end
 	if mode == "XMod" then
 		GalaxyOptions[pn].SpeedRate = math.floor(val.value * 100 + 0.5)
@@ -489,9 +486,9 @@ end
 local function SyncSpeedValueChoices(pn)
 	local rows = PlayerOptionRows[pn]
 	if not rows then return end
-	local valRow  = rows[2]
+	local valRow  = rows[3]
 
-	-- Determine OLD mode from the choices still on the row (not from row 1,
+	-- Determine OLD mode from the choices still on the row (not from row 2,
 	-- which has already been updated to the new mode by the input handler).
 	local oldVal = valRow.choices[valRow.selected]
 	if oldVal then
@@ -505,7 +502,7 @@ local function SyncSpeedValueChoices(pn)
 	end
 
 	-- Now switch to the new mode's choices and restore saved value
-	local mode = SpeedModes[rows[1].selected].value
+	local mode = SpeedModes[rows[2].selected].value
 	local opts = GalaxyOptions[pn] or {}
 	if mode == "XMod" then
 		valRow.choices = XModValues
@@ -615,21 +612,25 @@ local function ApplyMenuOptions(pn)
 	local rows = PlayerOptionRows[pn]
 	if not rows then return end
 
+	-- Difficulty (row 1): set preferred difficulty
+	local diffValue = DifficultyChoices[rows[1].selected].value
+	GAMESTATE:SetPreferredDifficulty(pn, diffValue)
+
 	-- Speed: store mode + value in GalaxyOptions, then apply
-	local mode = SpeedModes[rows[1].selected].value
+	local mode = SpeedModes[rows[2].selected].value
 	GalaxyOptions[pn].SpeedMode = mode
 	SaveSpeedValueNow(pn)
 	ApplySpeedMod(pn)
 
 	-- Turn: clear all, then apply
 	GAMESTATE:ApplyPreferredModifiers(pn, "no mirror,no left,no right,no shuffle,no supershuffle")
-	local turnMod = TurnChoices[rows[3].selected].mod
+	local turnMod = TurnChoices[rows[4].selected].mod
 	if turnMod ~= "" then
 		GAMESTATE:ApplyPreferredModifiers(pn, turnMod)
 	end
 
 	-- Scroll
-	local scrollMod = ScrollChoices[rows[4].selected].mod
+	local scrollMod = ScrollChoices[rows[5].selected].mod
 	if scrollMod == "Reverse" then
 		GAMESTATE:ApplyPreferredModifiers(pn, "Reverse")
 	else
@@ -637,71 +638,71 @@ local function ApplyMenuOptions(pn)
 	end
 
 	-- Gauge: store in global table for GaugeState to read
-	GalaxyOptions[pn].Gauge = GaugeChoices[rows[5].selected].value
+	GalaxyOptions[pn].Gauge = GaugeChoices[rows[6].selected].value
 
-	-- Fail (row 6): when the song auto-fails
-	GalaxyOptions[pn].Fail = rows[6].selected
+	-- Fail (row 7): when the song auto-fails
+	GalaxyOptions[pn].Fail = rows[7].selected
 
 	-- Turn/Scroll indices stored in GalaxyOptions for profile save
-	GalaxyOptions[pn].Turn   = rows[3].selected
-	GalaxyOptions[pn].Scroll = rows[4].selected
+	GalaxyOptions[pn].Turn   = rows[4].selected
+	GalaxyOptions[pn].Scroll = rows[5].selected
 
-	-- NoteSkin (row 7)
-	local nsValue = rows[7].choices[rows[7].selected].value
+	-- NoteSkin (row 8)
+	local nsValue = rows[8].choices[rows[8].selected].value
 	local po = GAMESTATE:GetPlayerState(pn):GetPlayerOptions("ModsLevel_Preferred")
 	po:NoteSkin(nsValue)
 	GalaxyOptions[pn].NoteSkin = nsValue
 
-	-- Accel (row 8): clear all acceleration mods, then apply selected
+	-- Accel (row 9): clear all acceleration mods, then apply selected
 	GAMESTATE:ApplyPreferredModifiers(pn, "no boost,no brake,no wave")
-	local accelMod = AccelChoices[rows[8].selected].mod
+	local accelMod = AccelChoices[rows[9].selected].mod
 	if accelMod ~= "" then
 		GAMESTATE:ApplyPreferredModifiers(pn, accelMod)
 	end
-	GalaxyOptions[pn].Accel = rows[8].selected
+	GalaxyOptions[pn].Accel = rows[9].selected
 
-	-- Lane Cover (row 9): save type (drawing handled in gameplay overlay)
+	-- Lane Cover (row 10): save type (drawing handled in gameplay overlay)
 	GAMESTATE:ApplyPreferredModifiers(pn, "no hidden,no sudden")
-	GalaxyOptions[pn].LaneCover = rows[9].selected
+	GalaxyOptions[pn].LaneCover = rows[10].selected
 
-	-- Cover % (row 10): save percentage index
-	GalaxyOptions[pn].CoverPercent = rows[10].selected
+	-- Cover % (row 11): save percentage index
+	GalaxyOptions[pn].CoverPercent = rows[11].selected
 
-	-- Lane Visibility (row 11): theme-level setting for gameplay overlay
-	GalaxyOptions[pn].LaneVis = rows[11].selected
+	-- Lane Visibility (row 12): theme-level setting for gameplay overlay
+	GalaxyOptions[pn].LaneVis = rows[12].selected
 
-	-- Guideline (row 12): theme-level setting
-	GalaxyOptions[pn].Guideline = rows[12].selected
+	-- Guideline (row 13): theme-level setting
+	GalaxyOptions[pn].Guideline = rows[13].selected
 
-	-- Step Zone (row 13): theme-level setting
-	GalaxyOptions[pn].StepZone = rows[13].selected
+	-- Step Zone (row 14): theme-level setting
+	GalaxyOptions[pn].StepZone = rows[14].selected
 
-	-- Fast/Slow (row 14): theme-level setting
-	GalaxyOptions[pn].FastSlow = rows[14].selected
+	-- Fast/Slow (row 15): theme-level setting
+	GalaxyOptions[pn].FastSlow = rows[15].selected
 
-	-- Combo Priority (row 15): theme-level setting
-	GalaxyOptions[pn].ComboPriority = rows[15].selected
+	-- Combo Priority (row 16): theme-level setting
+	GalaxyOptions[pn].ComboPriority = rows[16].selected
 
-	-- Judge Priority (row 16): theme-level setting
-	GalaxyOptions[pn].JudgePriority = rows[16].selected
+	-- Judge Priority (row 17): theme-level setting
+	GalaxyOptions[pn].JudgePriority = rows[17].selected
 
-	-- Judge Position (row 17): theme-level setting
-	GalaxyOptions[pn].JudgePosition = rows[17].selected
+	-- Judge Position (row 18): theme-level setting
+	GalaxyOptions[pn].JudgePosition = rows[18].selected
 
-	-- Visual Delay (row 18): ms offset applied to engine before gameplay
-	GalaxyOptions[pn].VisualDelay = VisualDelayChoices[rows[18].selected].value
+	-- Visual Delay (row 19): ms offset applied to engine before gameplay
+	GalaxyOptions[pn].VisualDelay = VisualDelayChoices[rows[19].selected].value
 
-	-- Audio Sync (row 19): ms offset applied to engine before gameplay
-	GalaxyOptions[pn].AudioSync = AudioSyncChoices[rows[19].selected].value
+	-- Audio Sync (row 20): ms offset applied to engine before gameplay
+	GalaxyOptions[pn].AudioSync = AudioSyncChoices[rows[20].selected].value
 
-	-- Pitch (row 20): music rate applied to engine before gameplay
-	GalaxyOptions[pn].Pitch = PitchChoices[rows[20].selected].value
+	-- Pitch (row 21): music rate applied to engine before gameplay
+	GalaxyOptions[pn].Pitch = PitchChoices[rows[21].selected].value
 
-	-- Arrow Visibility (row 21): Normal or Constant
-	GalaxyOptions[pn].ArrowVis = ArrowVisChoices[rows[21].selected].value
+	-- Arrow Visibility (row 22): Normal or Constant
+	GalaxyOptions[pn].ArrowVis = ArrowVisChoices[rows[22].selected].value
 
-	-- Constant Value (row 22): millisecond visibility window for Constant mode
-	GalaxyOptions[pn].ConstantMs = ConstantMsChoices[rows[22].selected].value
+	-- Constant Value (row 23): millisecond visibility window for Constant mode
+	GalaxyOptions[pn].ConstantMs = ConstantMsChoices[rows[23].selected].value
 
 	-- Apply engine-level settings (PREFSMAN / SongOptions)
 	PREFSMAN:SetPreference("VisualDelaySeconds", GalaxyOptions[pn].VisualDelay / 1000)
@@ -737,6 +738,8 @@ local function CloseMenu(pn, apply)
 	_confirmHeld[pn] = false
 	_confirmDirty[pn] = false
 	if MenuFrame[pn] then MenuFrame[pn]:visible(false) end
+	-- Refresh the song grid so flare tints reflect updated preferred difficulty
+	if apply then Refresh() end
 end
 
 -- Check if ANY player's menu is open (blocks grid navigation)
@@ -1140,7 +1143,7 @@ local function ComputeVisibleItems(renderMargin)
 end
 
 -- ===== RENDER =====
-local function Refresh(preItems)
+Refresh = function(preItems)
 	if #FlatList == 0 then return end
 
 	local items = preItems or ComputeVisibleItems(RENDER_MARGIN + math.abs(VisualOffset))
@@ -1502,9 +1505,9 @@ local function InputHandler(event)
 				row.selected = math.max(1, row.selected - 1)
 			end
 			-- When Speed Mode changes, update Speed Value choices
-			if rowIdx == 1 then SyncSpeedValueChoices(pn) end
-			-- Immediately persist speed value when row 2 changes
-			if rowIdx == 2 then SaveSpeedValueNow(pn) end
+			if rowIdx == 2 then SyncSpeedValueChoices(pn) end
+			-- Immediately persist speed value when row 3 changes
+			if rowIdx == 3 then SaveSpeedValueNow(pn) end
 			SfxSwitch:play()
 			RefreshMenu(pn)
 		elseif btn == "MenuRight" then
@@ -1529,9 +1532,9 @@ local function InputHandler(event)
 				row.selected = math.min(#row.choices, row.selected + 1)
 			end
 			-- When Speed Mode changes, update Speed Value choices
-			if rowIdx == 1 then SyncSpeedValueChoices(pn) end
-			-- Immediately persist speed value when row 2 changes
-			if rowIdx == 2 then SaveSpeedValueNow(pn) end
+			if rowIdx == 2 then SyncSpeedValueChoices(pn) end
+			-- Immediately persist speed value when row 3 changes
+			if rowIdx == 3 then SaveSpeedValueNow(pn) end
 			SfxSwitch:play()
 			RefreshMenu(pn)
 		elseif btn == "Start" then
@@ -1740,6 +1743,7 @@ end
 
 -- ===== SIDE MENU ACTOR =====
 local MENU_ROW_NAMES = {
+	"Difficulty",
 	"Mode", "Speed", "Turn", "Scroll", "Gauge", "Fail",
 	"NoteSkin", "Accel", "Cover", "Cover %", "Lane Vis",
 	"Guideline", "StepZone", "Fast/Slow", "Combo",
@@ -1788,13 +1792,13 @@ local function MakeMenu(pn)
 
 			-- Update speed BPM preview below the Speed row
 			local preview = self:GetChild("SpeedPreview")
-			if preview and rows[1] and rows[2] then
+			if preview and rows[2] and rows[3] then
 				local song = GAMESTATE:GetCurrentSong()
 				if not song then
 					preview:settext(""):Regen()
 				else
-					local mode = SpeedModes[rows[1].selected].value
-					local val  = rows[2].choices[rows[2].selected].value
+					local mode = SpeedModes[rows[2].selected].value
+					local val  = rows[3].choices[rows[3].selected].value
 					local bpms = song:GetDisplayBpms()
 					local minB = math.floor(bpms[1] + 0.5)
 					local maxB = math.floor(bpms[2] + 0.5)
@@ -1915,7 +1919,7 @@ local function MakeMenu(pn)
 	end
 
 	-- Speed BPM preview (displayed below the Speed row)
-	local speedRowY = topY + MENU_PAD + 36 + (2 - 1) * MENU_ROW_H + MENU_ROW_H/2
+	local speedRowY = topY + MENU_PAD + 36 + (3 - 1) * MENU_ROW_H + MENU_ROW_H/2
 	m[#m+1] = Def.Text{
 		Font = RodinPath("db"), Size = FontS("db"), Text = "",
 		Name = "SpeedPreview",
@@ -2610,11 +2614,17 @@ local function MakeScorePanel(pn)
 		-- === Highlight the currently selected difficulty ===
 		HighlightDiffCommand = function(self)
 			local steps = GAMESTATE:GetCurrentSteps(pn)
-			local newIdx = 0
+			local targetDiff = nil
 			if steps then
-				local d = steps:GetDifficulty()
+				targetDiff = steps:GetDifficulty()
+			else
+				-- No steps set yet (browsing) — highlight preferred difficulty
+				targetDiff = GAMESTATE:GetPreferredDifficulty(pn)
+			end
+			local newIdx = 0
+			if targetDiff then
 				for i, diff in ipairs(PANEL_DIFFS) do
-					if diff == d then newIdx = i; break end
+					if diff == targetDiff then newIdx = i; break end
 				end
 			end
 			for i = 1, 5 do
