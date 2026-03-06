@@ -30,14 +30,20 @@ local BAR_H      = 18
 local BAR_Y      = 24     -- from top of screen
 local BAR_BORDER = 2
 
--- Get the gauge key string for color lookup
+-- Get the gauge key string for color lookup.
+-- For FloatingFlare, returns the color for the *current* flare level
+-- so the bar dynamically changes color as the player drops levels.
 local function GetGaugeColorKey(pn)
 	local gs = GaugeState[pn]
 	if not gs then return "Normal" end
 	if gs.gaugeType == "Normal" then return "Normal" end
 	if gs.gaugeType == "LIFE4" then return "LIFE4" end
 	if gs.gaugeType == "Risky" then return "Risky" end
-	if gs.gaugeType == "FloatingFlare" then return "FloatingFlare" end
+	if gs.gaugeType == "FloatingFlare" then
+		local cur = gs.floatingCurrent or 10
+		if cur == 10 then return "FlareEX" end
+		return "Flare" .. cur
+	end
 	if gs.gaugeType == "Flare" and gs.flareIndex then
 		if gs.flareIndex == 10 then return "FlareEX" end
 		return "Flare" .. gs.flareIndex
@@ -716,13 +722,24 @@ for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
 			self:xy(barX - BAR_W/2, BAR_Y)
 				:halign(0)
 				:zoomto(BAR_W, BAR_H)
-				:diffuse(color("#22cc44"))
+				:diffuse(GaugeBarColors.Normal)
 		end,
 		DoneLoadingNextSongMessageCommand = function(self)
-			-- Set initial color based on gauge type
+			-- Reset bar to initial state for this stage.
+			-- InitGauge already ran (GameplaySystem handles DoneLoadingNextSong
+			-- first in tree order) so GaugeState[pn] is valid here.
+			local gs = GaugeState[pn]
 			local key = GetGaugeColorKey(pn)
 			local c = GaugeBarColors[key] or GaugeBarColors.Normal
-			self:diffuse(c)
+			-- Set initial bar width from starting life
+			local life = gs and gs.life or 0.5
+			local gType = gs and gs.gaugeType or "Normal"
+			if gType == "LIFE4" or gType == "Risky" then
+				local maxL = gs.maxLives or 1
+				life = maxL > 0 and (gs.life / maxL) or 0
+			end
+			local fillW = math.max(0, math.min(1, life)) * BAR_W
+			self:stoptweening():zoomto(fillW, BAR_H):diffuse(c)
 		end,
 		GalaxyLifeChangedMessageCommand = function(self, params)
 			if params.Player ~= pn then return end
@@ -768,10 +785,8 @@ for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
 		end,
 		GalaxyLifeChangedMessageCommand = function(self, params)
 			if params.Player ~= pn then return end
-			if params.GaugeType == "FloatingFlare" and params.FloatingCurrent then
-				local roman = {"I","II","III","IV","V","VI","VII","VIII","IX","EX"}
-				self:settext("Float " .. (roman[params.FloatingCurrent] or "?")):Regen()
-			end
+			-- Always refresh the label so gauge type changes between stages are visible
+			self:settext(GetGaugeDisplayName(pn)):Regen()
 		end,
 	}
 
@@ -783,6 +798,19 @@ for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
 				:zoom(FONT_ZOOM):diffuse(Color.White)
 			self:shadowlength(0)
 			self:SetTextureFiltering(false)
+		end,
+		DoneLoadingNextSongMessageCommand = function(self)
+			-- Show initial life value (covers the gap before first judgment)
+			local gs = GaugeState[pn]
+			if not gs then return end
+			local gType = gs.gaugeType
+			if gType == "LIFE4" or gType == "Risky" then
+				local lives = math.floor(gs.life)
+				self:settext(lives .. " / " .. (gs.maxLives or 0)):Regen()
+			else
+				local pct = math.floor((gs.life or 0) * 100 + 0.5)
+				self:settext(pct .. "%"):Regen()
+			end
 		end,
 		GalaxyLifeChangedMessageCommand = function(self, params)
 			if params.Player ~= pn then return end
