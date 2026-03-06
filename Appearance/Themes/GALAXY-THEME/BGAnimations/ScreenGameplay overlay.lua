@@ -841,14 +841,30 @@ for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
 	}
 	t[#t+1] = barFrame
 
-	-- Score display
-	t[#t+1] = Def.Text{ Font = RodinPath("db"), Size = FontL("db"), Text = "",
+	-- ===== SCORE DISPLAY (bottom of play area, centered on notefield) =====
+	local SCORE_Y = SCREEN_HEIGHT - 48  -- near bottom of screen
+
+	local scoreFrame = Def.ActorFrame{
+		Name = "ScoreFrame_" .. ToEnumShortString(pn),
+		InitCommand = function(self)
+			self:y(SCORE_Y)
+		end,
+		OnCommand = function(self)
+			local screen = SCREENMAN:GetTopScreen()
+			if not screen then return end
+			local playerActor = screen:GetChild("Player" .. ToEnumShortString(pn))
+			if not playerActor then return end
+			self:x(playerActor:GetX())
+		end,
+	}
+
+	-- Main score (left side)
+	scoreFrame[#scoreFrame+1] = Def.Text{ Font = RodinPath("db"), Size = FontL("db"), Text = "",
 		Name = "Score_" .. ToEnumShortString(pn),
 		InitCommand = function(self)
-			self:xy(scoreX, BAR_Y)
+			self:x(-0)
 				:zoom(FONT_ZOOM):diffuse(Color.White)
-			self:halign(isP1 and 0 or 1):settext("0"):Regen():shadowlength(0)
-			self:SetTextureFiltering(false)
+			self:halign(1):settext("0"):Regen():shadowlength(0)
 		end,
 		GalaxyScoreChangedMessageCommand = function(self, params)
 			if params.Player == pn then
@@ -857,30 +873,13 @@ for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
 		end,
 	}
 
-	-- EX Score display
-	t[#t+1] = Def.Text{ Font = RodinPath("db"), Size = FontS("db"), Text = "",
-		Name = "EX_" .. ToEnumShortString(pn),
-		InitCommand = function(self)
-			self:xy(scoreX, BAR_Y + 24)
-				:zoom(FONT_ZOOM):diffuse(color("#aaaaff"))
-			self:halign(isP1 and 0 or 1):settext("EX 0.00%"):Regen():shadowlength(0)
-			self:SetTextureFiltering(false)
-		end,
-		GalaxyScoreChangedMessageCommand = function(self, params)
-			if params.Player == pn then
-				self:settext(string.format("EX %.2f%%", params.EXPercent)):Regen()
-			end
-		end,
-	}
-
-	-- Grade display
-	t[#t+1] = Def.Text{ Font = RodinPath("db"), Size = FontM("db"), Text = "",
+	-- Grade (right side)
+	scoreFrame[#scoreFrame+1] = Def.Text{ Font = RodinPath("db"), Size = FontM("db"), Text = "",
 		Name = "Grade_" .. ToEnumShortString(pn),
 		InitCommand = function(self)
-			self:xy(scoreX + sideSign * 120, BAR_Y)
+			self:x(200)
 				:zoom(FONT_ZOOM):diffuse(color("#ffcc00"))
-			self:halign(0.5):shadowlength(0)
-			self:SetTextureFiltering(false)
+			self:halign(0):shadowlength(0)
 		end,
 		GalaxyScoreChangedMessageCommand = function(self, params)
 			if params.Player == pn then
@@ -888,6 +887,24 @@ for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
 			end
 		end,
 	}
+
+	-- EX Score (second row, centered)
+	scoreFrame[#scoreFrame+1] = Def.Text{ Font = RodinPath("db"), Size = FontS("db"), Text = "",
+		Name = "EX_" .. ToEnumShortString(pn),
+		InitCommand = function(self)
+			self:y(28)
+				:zoom(FONT_ZOOM):diffuse(color("#aaaaff"))
+			self:halign(0.5):settext("EX  0.00 %%"):Regen():shadowlength(0)
+			self:x(-200)
+		end,
+		GalaxyScoreChangedMessageCommand = function(self, params)
+			if params.Player == pn then
+				self:settext(string.format("EX  %.2f %%", params.EXPercent)):Regen()
+			end
+		end,
+	}
+
+	t[#t+1] = scoreFrame
 end
 
 return t
