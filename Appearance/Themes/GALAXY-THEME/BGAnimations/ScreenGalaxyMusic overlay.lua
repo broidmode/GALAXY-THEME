@@ -107,6 +107,73 @@ local DiffColors = {
 	Difficulty_Edit      = color("#afafaf"),
 }
 
+-- Flare tint colors for song card backgrounds.
+-- Matches the gameplay GaugeBarColors but at reduced alpha for a subtle tint
+-- on the dark card BG.  Normal/LIFE4/Risky get no tint (nil = no color).
+local FLARE_TINT_ALPHA = 0.35
+local FlareTintColors = {
+	Flare1  = color("#0066FF"),
+	Flare2  = color("#00FFFF"),
+	Flare3  = color("#48FF00"),
+	Flare4  = color("#FFBB00"),
+	Flare5  = color("#EF5E36"),
+	Flare6  = color("#CC0CDD"),
+	Flare7  = color("#A9A9A9"),
+	Flare8  = color("#DFDFDF"),
+	Flare9  = color("#8F8686"),
+	FlareEX = color("#E89FEC"),
+}
+
+-- Return the flare tint color (with alpha) for a song card, or nil if no tint.
+-- Uses the first enabled player's preferred difficulty to find the right chart.
+-- Falls back to the best flare result across all available difficulties.
+local function GetFlareTintForCard(song, stepsArray)
+	if not song then return nil end
+	local pn = GAMESTATE:GetEnabledPlayers()[1]
+	if not pn then return nil end
+
+	-- Try preferred difficulty first
+	local prefDiff = GAMESTATE:GetPreferredDifficulty(pn)
+	local style = GAMESTATE:GetCurrentStyle()
+	if prefDiff and style then
+		local stType = style:GetStepsType()
+		local steps = song:GetOneSteps(stType, prefDiff)
+		if steps then
+			local chartKey = GetChartKey(song, steps)
+			local cr = chartKey and GetChartResult(pn, chartKey)
+			if cr and cr.flareGauge then
+				local base = FlareTintColors[cr.flareGauge]
+				if base then
+					return { base[1], base[2], base[3], FLARE_TINT_ALPHA }
+				end
+			end
+		end
+	end
+
+	-- Fallback: scan all available steps for the best flare result
+	if stepsArray then
+		local bestStrength = 0
+		local bestColor = nil
+		for i = 2, #stepsArray do
+			local chartKey = GetChartKey(song, stepsArray[i])
+			local cr = chartKey and GetChartResult(pn, chartKey)
+			if cr and cr.flareGauge and FlareTintColors[cr.flareGauge] then
+				local str = ({ Flare1=1, Flare2=2, Flare3=3, Flare4=4, Flare5=5,
+					Flare6=6, Flare7=7, Flare8=8, Flare9=9, FlareEX=10 })[cr.flareGauge] or 0
+				if str > bestStrength then
+					bestStrength = str
+					bestColor = FlareTintColors[cr.flareGauge]
+				end
+			end
+		end
+		if bestColor then
+			return { bestColor[1], bestColor[2], bestColor[3], FLARE_TINT_ALPHA }
+		end
+	end
+
+	return nil
+end
+
 -- Global options table — read by 04 GaugeState.lua and gameplay decorations
 -- Per-player settings are loaded from profile by 03 ProfilePrefs.lua.
 -- GalaxyOptions[pn] = { SpeedMode, SpeedValue, Turn, Scroll, Gauge }
@@ -1118,6 +1185,7 @@ local function Refresh(preItems)
 			a:playcommand("SetCard", {
 				Song = entry[1],
 				Steps = entry[2],
+				Entry = entry,
 				HasFocus = info.hasFocus,
 			})
 		end
@@ -1175,6 +1243,7 @@ local function Refresh(preItems)
 				a:playcommand("SetCard", {
 					Song = entry[1],
 					Steps = entry[2],
+					Entry = entry,
 					HasFocus = info.hasFocus,
 				})
 				loadsThisFrame = loadsThisFrame + 1
@@ -1548,7 +1617,21 @@ local function MakeSongCard(name)
 		InitCommand = function(self) self:visible(false) end,
 		SetCardCommand = function(self, params)
 			self:GetChild("Border"):visible(params.HasFocus)
-			self:GetChild("BG"):diffuse(params.HasFocus and color("#333333") or color("#1a1a1a"))
+
+			-- Base BG color, then blend in flare tint if the chart has a flare result
+			local bg = self:GetChild("BG")
+			local baseC = params.HasFocus and color("#333333") or color("#1a1a1a")
+			local tint = GetFlareTintForCard(params.Song, params.Entry)
+			if tint then
+				-- Blend: base * (1-a) + tint * a
+				local a = tint[4]
+				local r = baseC[1]*(1-a) + tint[1]*a
+				local g = baseC[2]*(1-a) + tint[2]*a
+				local b = baseC[3]*(1-a) + tint[3]*a
+				bg:diffuse({r, g, b, 1})
+			else
+				bg:diffuse(baseC)
+			end
 
 			local title = self:GetChild("Title")
 			if params.Song then
