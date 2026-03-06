@@ -216,6 +216,9 @@ function FinalizeChartResult(pn, song, steps)
 			effectiveGauge = "Normal"  -- battery gauges earn Normal-level flare points
 		end
 		flarePoints = LookupFlarePoints(steps:GetMeter(), effectiveGauge)
+	else
+		-- Failed: don't credit any flare gauge — downgrade to Normal
+		gaugeStr = "Normal"
 	end
 
 	RecordChartResult(pn, chartKey, lamp, gaugeStr, flarePoints)
