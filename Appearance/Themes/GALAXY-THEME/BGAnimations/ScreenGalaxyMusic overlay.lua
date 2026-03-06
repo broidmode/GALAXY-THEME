@@ -14,8 +14,8 @@ local CARD_H       = 285
 local COL_GAP      = 18
 local ROW_GAP      = 18
 local HEADER_H     = 66
-local POOL_CARDS   = 60    -- generous pool: ~15 visible + ~45 cached off-screen
-local POOL_HEADERS = 12
+local POOL_CARDS   = 75    -- generous pool: ~15 visible + ~60 cached off-screen
+local POOL_HEADERS = 30    -- when all folders closed, ~21 headers fill screen
 
 local GRID_X       = SCREEN_CENTER_X
 local CENTER_Y     = SCREEN_CENTER_Y  -- cursor item is pinned here
@@ -24,7 +24,7 @@ local totalColW    = CARD_W + COL_GAP
 local totalRowH    = CARD_H + ROW_GAP
 
 -- How far above/below center we render (pixels)
-local RENDER_MARGIN = SCREEN_HEIGHT / 2 + CARD_H + 60
+local RENDER_MARGIN = SCREEN_HEIGHT / 2 + CARD_H * 2 + 60
 
 -- Direction debounce: only load new images after 2 consecutive moves same direction
 local LastMoveDir  = 0     -- +1 = down/right, -1 = up/left, 0 = none
@@ -1204,7 +1204,7 @@ Refresh = function(preItems)
 	--   full: full-res, no cap, bypass debounce
 	local _jq = GetGalaxyPref("JacketQuality") or "incremental"
 	if _jq == "full" then allowNewLoads = true end
-	local MAX_LOADS_PER_FRAME = (_jq == "incremental") and 3 or math.huge
+	local MAX_LOADS_PER_FRAME = (_jq == "incremental") and 6 or math.huge
 	local loadsThisFrame = 0
 	local skippedAny = false
 
