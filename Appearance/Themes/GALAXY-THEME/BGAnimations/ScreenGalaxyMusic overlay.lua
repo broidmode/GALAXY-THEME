@@ -2452,7 +2452,7 @@ local PANEL_DIFFS = {
 	"Difficulty_Hard",
 	"Difficulty_Challenge",
 }
-local PANEL_DIFF_LABELS = { "BEG", "BSC", "DIF", "EXP", "CHA" }
+local PANEL_DIFF_LABELS = { "BEG", "ESY", "MED", "HRD", "CHA" }
 
 local PANEL_DIFF_COLORS = {
 	Difficulty_Beginner  = color("#1ed6ff"),

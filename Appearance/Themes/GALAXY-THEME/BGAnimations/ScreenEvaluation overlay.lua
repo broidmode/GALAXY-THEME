@@ -19,12 +19,12 @@ local DiffColors = {
 	Edit      = color("#aaaaaa"),
 }
 
--- Difficulty display labels (DDR-style)
+-- Difficulty display labels
 local DiffLabels = {
 	Beginner  = "BEGINNER",
-	Easy      = "BASIC",
-	Medium    = "DIFFICULT",
-	Hard      = "EXPERT",
+	Easy      = "EASY",
+	Medium    = "MEDIUM",
+	Hard      = "HARD",
 	Challenge = "CHALLENGE",
 	Edit      = "EDIT",
 }
