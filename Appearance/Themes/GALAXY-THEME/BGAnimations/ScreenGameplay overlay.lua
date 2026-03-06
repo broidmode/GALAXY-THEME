@@ -6,20 +6,20 @@
 -- ===== GAUGE BAR COLORS =====
 -- Based on DDR-A3 Flare gauge textures (gold → coral → pink → magenta gradient)
 local GaugeBarColors = {
-	Normal        = color("#FFF200"),
-	Flare1        = color("#0066FF"),
-	Flare2        = color("#00FFFF"),
-	Flare3        = color("#48FF00"),
-	Flare4        = color("#FFBB00"),
-	Flare5        = color("#EF5E36"),
-	Flare6        = color("#CC0CDD"),
-	Flare7        = color("#A9A9A9"),
-	Flare8        = color("#DFDFDF"),
-	Flare9        = color("#8F8686"),
-	FlareEX       = color("#E89FEC"),
-	FloatingFlare = color("#A7BFF4"),
-	LIFE4         = color("#3399ff"),
-	Risky         = color("#ff3333"),
+	Normal        = color("#FFF200"),   -- green
+	Flare1        = color("#0066FF"),   -- gold
+	Flare2        = color("#00FFFF"),   -- warm gold
+	Flare3        = color("#48FF00"),   -- amber
+	Flare4        = color("#FFBB00"),   -- golad-orange
+	Flare5        = color("#EF5E36"),   -- coral
+	Flare6        = color("#CC0CDD"),   -- pink-coral
+	Flare7        = color("#A9A9A9"),   -- rose
+	Flare8        = color("#DFDFDF"),   -- hot pink
+	Flare9        = color("#8F8686"),   -- magenta-violet
+	FlareEX       = color("#E89FEC"),   -- bright gold (rainbow in A3)
+	FloatingFlare = color("#A7BFF4"),   -- same bright gold
+	LIFE4         = color("#3399ff"),   -- blue
+	Risky         = color("#ff3333"),   -- red
 }
 local GaugeDangerColor = color("#8F8F8F")  -- gray when in danger
 local GaugeFailColor   = color("#ff2222")  -- red on fail
