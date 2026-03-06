@@ -214,8 +214,8 @@ end
 
 local ARROW_SPACING         = 64    -- NF pixels per beat ([ArrowEffects] metric)
 local NF_ZOOM               = SCREEN_HEIGHT / 480  -- Player actor zoom (2.25 @1080p)
-local RECEPTOR_NF_Y_NORMAL  = -144  -- ReceptorArrowsYStandard (NF coords)
-local RECEPTOR_NF_Y_REVERSE =  144  -- ReceptorArrowsYReverse  (NF coords)
+local RECEPTOR_NF_Y_NORMAL  = -161  -- ReceptorArrowsYStandard (NF coords, DDR-A3 value)
+local RECEPTOR_NF_Y_REVERSE =  156  -- ReceptorArrowsYReverse  (NF coords, DDR-A3 value)
 local CONST_FADE_MS         = 50    -- width of the gradient band in ms
 
 -- Shared per-player: the cover zone boundaries (screen Y coords).
