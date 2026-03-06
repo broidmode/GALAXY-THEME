@@ -6,18 +6,18 @@
 -- ===== GAUGE BAR COLORS =====
 -- Based on DDR-A3 Flare gauge textures (gold → coral → pink → magenta gradient)
 local GaugeBarColors = {
-	Normal        = color("#FFF200"),   -- green
-	Flare1        = color("#0066FF"),   -- gold
-	Flare2        = color("#00FFFF"),   -- warm gold
-	Flare3        = color("#48FF00"),   -- amber
-	Flare4        = color("#FFBB00"),   -- golad-orange
-	Flare5        = color("#EF5E36"),   -- coral
-	Flare6        = color("#CC0CDD"),   -- pink-coral
-	Flare7        = color("#A9A9A9"),   -- rose
-	Flare8        = color("#DFDFDF"),   -- hot pink
-	Flare9        = color("#8F8686"),   -- magenta-violet
-	FlareEX       = color("#E89FEC"),   -- bright gold (rainbow in A3)
-	FloatingFlare = color("#A7BFF4"),   -- same bright gold
+	Normal        = color("#22cc44"),   -- green
+	Flare1        = color("#C1A62B"),   -- gold
+	Flare2        = color("#C9A033"),   -- warm gold
+	Flare3        = color("#D49842"),   -- amber
+	Flare4        = color("#DD9152"),   -- gold-orange
+	Flare5        = color("#E8866C"),   -- coral
+	Flare6        = color("#EF7E89"),   -- pink-coral
+	Flare7        = color("#ED7AA2"),   -- rose
+	Flare8        = color("#EB73CA"),   -- hot pink
+	Flare9        = color("#E86FE9"),   -- magenta-violet
+	FlareEX       = color("#FFD700"),   -- bright gold (rainbow in A3)
+	FloatingFlare = color("#FFD700"),   -- same bright gold
 	LIFE4         = color("#3399ff"),   -- blue
 	Risky         = color("#ff3333"),   -- red
 }
@@ -775,16 +775,6 @@ for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
 				sprA:diffuse(barColor)
 				sprB:diffuse(barColor)
 
-				-- Edge fade: apply fadeleft only to the leftmost sprite,
-				-- faderight only to the rightmost, to avoid a dark seam
-				if axPos <= bxPos then
-					sprA:fadeleft(EDGE_FADE):faderight(0)
-					sprB:fadeleft(0):faderight(EDGE_FADE)
-				else
-					sprA:fadeleft(0):faderight(EDGE_FADE)
-					sprB:fadeleft(EDGE_FADE):faderight(0)
-				end
-
 				local fillW = barLife * playW
 				for _, pair in ipairs({{sprA, axPos}, {sprB, bxPos}}) do
 					local spr, sx = pair[1], pair[2]
@@ -863,6 +853,35 @@ for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
 				self:x(playW)
 				self:diffuse(barColor)
 				Trace("[BAR-DBG] SmokeB OnCommand: x=" .. tostring(playW))
+			end,
+		},
+
+		-- Edge fade masks: fixed quads on top of smoke that darken edges
+		-- to the track color, creating a smooth fade at left/right bar boundaries.
+		Def.Quad{
+			Name = "FadeMaskL",
+			InitCommand = function(self)
+				local fadeW = EDGE_FADE * playW
+				self:halign(0):valign(0.5)
+				self:zoomto(fadeW, BAR_H)
+				self:x(0)
+				local tc = color("#0a0a12")      -- track color, opaque
+				local t0 = {tc[1],tc[2],tc[3],0}  -- same color, transparent
+				self:diffuseupperleft(tc):diffuselowerleft(tc)
+					:diffuseupperright(t0):diffuselowerright(t0)
+			end,
+		},
+		Def.Quad{
+			Name = "FadeMaskR",
+			InitCommand = function(self)
+				local fadeW = EDGE_FADE * playW
+				self:halign(1):valign(0.5)
+				self:zoomto(fadeW, BAR_H)
+				self:x(playW)
+				local tc = color("#0a0a12")
+				local t0 = {tc[1],tc[2],tc[3],0}
+				self:diffuseupperleft(t0):diffuselowerleft(t0)
+					:diffuseupperright(tc):diffuselowerright(tc)
 			end,
 		},
 	}
