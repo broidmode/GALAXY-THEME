@@ -24,9 +24,8 @@ local GaugeBarColors = {
 local GaugeDangerColor = color("#8F8F8F")  -- gray when in danger
 local GaugeFailColor   = color("#ff2222")  -- red on fail
 
--- Bar dimensions and position (similar to A3: top of screen, near notefield)
-local BAR_W      = 300
-local BAR_H      = 18
+-- Bar dimensions (width is computed per-player from style data to match play area)
+local BAR_H      = 36     -- bar height (doubled from 18)
 local BAR_Y      = 24     -- from top of screen
 local BAR_BORDER = 2
 
@@ -690,38 +689,51 @@ end
 -- ===== HUD ELEMENTS (per player) =====
 for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
 	local isP1 = (pn == PLAYER_1)
-	-- Bar X: left side for P1, right side for P2 (similar to A3's cx±231)
-	local barX = isP1 and (SCREEN_CENTER_X - 231) or (SCREEN_CENTER_X + 231)
+	-- Compute play-area width from style data (same formula as lane filter/covers)
+	local style  = GAMESTATE:GetCurrentStyle(pn)
+	local barW   = style:GetWidth(pn) * (style:ColumnsPerPlayer() / 1.7)
 	-- Score text
 	local scoreX = isP1 and 40 or (SCREEN_WIDTH - 40)
 	local sideSign = isP1 and 1 or -1
 
 	-- ===== LIFE BAR =====
-	-- Background (dark track)
-	t[#t+1] = Def.Quad{
+	-- Wrapped in an ActorFrame centered on the player's notefield.
+	local barFrame = Def.ActorFrame{
+		Name = "LifeBar_" .. ToEnumShortString(pn),
+		InitCommand = function(self)
+			self:y(BAR_Y)
+		end,
+		OnCommand = function(self)
+			local screen = SCREENMAN:GetTopScreen()
+			if not screen then return end
+			local playerActor = screen:GetChild("Player" .. ToEnumShortString(pn))
+			if not playerActor then return end
+			self:x(playerActor:GetX())
+		end,
+	}
+	-- Background (dark border)
+	barFrame[#barFrame+1] = Def.Quad{
 		Name = "BarBorder_" .. ToEnumShortString(pn),
 		InitCommand = function(self)
-			self:xy(barX, BAR_Y)
-				:zoomto(BAR_W + BAR_BORDER*2, BAR_H + BAR_BORDER*2)
+			self:zoomto(barW + BAR_BORDER*2, BAR_H + BAR_BORDER*2)
 				:diffuse(color("#222233"))
 		end,
 	}
 	-- Empty track
-	t[#t+1] = Def.Quad{
+	barFrame[#barFrame+1] = Def.Quad{
 		Name = "BarTrack_" .. ToEnumShortString(pn),
 		InitCommand = function(self)
-			self:xy(barX, BAR_Y)
-				:zoomto(BAR_W, BAR_H)
+			self:zoomto(barW, BAR_H)
 				:diffuse(color("#0a0a12"))
 		end,
 	}
 	-- Fill bar (left-aligned within the track)
-	t[#t+1] = Def.Quad{
+	barFrame[#barFrame+1] = Def.Quad{
 		Name = "BarFill_" .. ToEnumShortString(pn),
 		InitCommand = function(self)
-			self:xy(barX - BAR_W/2, BAR_Y)
+			self:x(-barW/2)
 				:halign(0)
-				:zoomto(BAR_W, BAR_H)
+				:zoomto(barW, BAR_H)
 				:diffuse(GaugeBarColors.Normal)
 		end,
 		DoneLoadingNextSongMessageCommand = function(self)
@@ -738,7 +750,7 @@ for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
 				local maxL = gs.maxLives or 1
 				life = maxL > 0 and (gs.life / maxL) or 0
 			end
-			local fillW = math.max(0, math.min(1, life)) * BAR_W
+			local fillW = math.max(0, math.min(1, life)) * barW
 			self:stoptweening():zoomto(fillW, BAR_H):diffuse(c)
 		end,
 		GalaxyLifeChangedMessageCommand = function(self, params)
@@ -756,7 +768,7 @@ for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
 				local maxL = params.MaxLives or 1
 				life = maxL > 0 and (params.Life / maxL) or 0
 			end
-			local fillW = math.max(0, math.min(1, life)) * BAR_W
+			local fillW = math.max(0, math.min(1, life)) * barW
 
 			-- Color: use gauge color, but shift to gray in danger
 			local key = GetGaugeColorKey(pn)
@@ -772,10 +784,10 @@ for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
 	}
 
 	-- Gauge type label (small text below the bar)
-	t[#t+1] = Def.Text{ Font = RodinPath("db"), Size = FontS("db"), Text = "",
+	barFrame[#barFrame+1] = Def.Text{ Font = RodinPath("db"), Size = FontS("db"), Text = "",
 		Name = "GaugeLabel_" .. ToEnumShortString(pn),
 		InitCommand = function(self)
-			self:xy(barX, BAR_Y + BAR_H/2 + 12)
+			self:y(BAR_H/2 + 12)
 				:zoom(FONT_ZOOM):diffuse(color("#aaaaaa"))
 			self:shadowlength(0)
 			self:SetTextureFiltering(false)
@@ -791,11 +803,10 @@ for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
 	}
 
 	-- Life percentage text (overlaid on bar)
-	t[#t+1] = Def.Text{ Font = RodinPath("db"), Size = FontS("db"), Text = "",
+	barFrame[#barFrame+1] = Def.Text{ Font = RodinPath("db"), Size = FontS("db"), Text = "",
 		Name = "BarPct_" .. ToEnumShortString(pn),
 		InitCommand = function(self)
-			self:xy(barX, BAR_Y)
-				:zoom(FONT_ZOOM):diffuse(Color.White)
+			self:zoom(FONT_ZOOM):diffuse(Color.White)
 			self:shadowlength(0)
 			self:SetTextureFiltering(false)
 		end,
@@ -828,6 +839,7 @@ for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
 			end
 		end,
 	}
+	t[#t+1] = barFrame
 
 	-- Score display
 	t[#t+1] = Def.Text{ Font = RodinPath("db"), Size = FontL("db"), Text = "",
