@@ -20,11 +20,13 @@ local Prefs = {
 		Choices = { "DDR", "OutFox" },
 		Values  = { "DDR", "OutFox" },
 	},
-	-- Sorting
+	-- Sorting — two-letter codes set first/last priority; the unlisted
+	-- category fills the middle.  L = Latin, J = Japanese, N = Numbers.
+	-- Display strings show the full order for clarity.
 	JapaneseSorting = {
-		Default = "first",
-		Choices = { "First", "Last", "Romaji" },
-		Values  = { "first", "last", "romaji" },
+		Default = "nl",
+		Choices = { "J,N,L", "L,N,J", "J,L,N", "N,L,J", "L,J,N", "N,J,L", "Romaji" },
+		Values  = { "jl",   "lj",    "jn",    "nj",    "ln",    "nl",    "romaji" },
 	},
 	-- Music select jacket art quality
 	JacketQuality = {

@@ -922,10 +922,13 @@ end
 --   U+FF00–U+FFEF  → fullwidth forms (0xEF)
 -- Any first byte >= 0xE3 (227) covers all of these.
 --
--- JapaneseSorting pref values:
---   "first"        → numbers, then Japanese, then English
---   "last"         → numbers, then English, then Japanese
---   "romaji"       → pure alphabetical on transliterated title (default engine order)
+-- JapaneseSorting pref: a two-letter code where the first letter is the
+-- highest-priority category and the second is the lowest.  The unlisted
+-- category fills the middle.  L = Latin, J = Japanese, N = Numbers.
+--   "jl"  → J, N, L      "lj"  → L, N, J
+--   "jn"  → J, L, N      "nj"  → N, L, J
+--   "ln"  → L, J, N      "nl"  → N, J, L
+--   "romaji" → pure alphabetical on transliterated title
 
 local function HasJapaneseTitle(song)
 	local title = song:GetDisplayMainTitle()
@@ -944,25 +947,40 @@ end
 
 -- Returns a sort-key string that groups songs by category bucket first,
 -- then alphabetically within each bucket.
--- Bucket prefixes: "0" = numeric, "1" = first priority, "2" = second priority.
+-- Bucket prefixes: "0" = first priority, "1" = middle, "2" = last priority.
 local function SortKey(song)
 	local translit = song:GetTranslitMainTitle():lower()
 	local jpMode = GetGalaxyPref("JapaneseSorting") or "romaji"
+
+	-- Migrate legacy values from older ThemePrefs.ini
+	if jpMode == "first" then jpMode = "nl" end
+	if jpMode == "last"  then jpMode = "nj" end
 
 	if jpMode == "romaji" then
 		return translit
 	end
 
-	local isJP = HasJapaneseTitle(song)
+	-- Determine which category this song belongs to: J, L, or N
+	local isJP  = HasJapaneseTitle(song)
 	local isNum = StartsWithDigit(translit)
-
-	if isNum then
-		return "0" .. translit          -- numbers always first
-	elseif jpMode == "first" then
-		return (isJP and "1" or "2") .. translit
-	else -- "last"
-		return (isJP and "2" or "1") .. translit
+	local cat
+	if isNum then cat = "n"
+	elseif isJP then cat = "j"
+	else cat = "l"
 	end
+
+	-- The two-letter code encodes first and last priority;
+	-- whichever letter is missing sits in the middle.
+	local first = jpMode:sub(1, 1)   -- highest priority
+	local last  = jpMode:sub(2, 2)   -- lowest priority
+
+	local prefix
+	if cat == first then prefix = "0"
+	elseif cat == last then prefix = "2"
+	else prefix = "1"
+	end
+
+	return prefix .. translit
 end
 
 local function SortSongs(songs)
