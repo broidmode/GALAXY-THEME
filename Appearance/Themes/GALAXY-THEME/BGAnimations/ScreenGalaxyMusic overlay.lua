@@ -750,6 +750,19 @@ local function AnyMenuOpen()
 	return false
 end
 
+-- Open/close menus for ALL enabled players at once (2P sync)
+local function OpenMenuAll()
+	for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
+		OpenMenu(pn)
+	end
+end
+
+local function CloseMenuAll(apply)
+	for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
+		CloseMenu(pn, apply)
+	end
+end
+
 -- ===== SONG PREVIEW =====
 local function PlaySongPreview()
 	if PreviewActor then
@@ -1446,15 +1459,15 @@ local function InputHandler(event)
 
 	local pn = event.PlayerNumber
 
-	-- Select button toggles the side menu for the pressing player
+	-- Select button toggles the side menu for ALL enabled players
 	if btn == "Select" then
 		if DiffPickOpen then return true end  -- block Select during diff pick
-		if not MenuOpen[pn] then
-			OpenMenu(pn)
+		if not AnyMenuOpen() then
+			OpenMenuAll()
 		elseif isRelease then
 			-- Release: close menu only if no L/R was pressed during hold
 			if not _confirmDirty[pn] then
-				CloseMenu(pn, true)
+				CloseMenuAll(true)
 			end
 			_confirmHeld[pn] = false
 			_confirmDirty[pn] = false
@@ -1557,9 +1570,9 @@ local function InputHandler(event)
 			RefreshMenu(pn)
 		elseif btn == "Start" then
 			if isRelease then
-				-- Release: close menu only if no L/R was pressed during hold
+				-- Release: close ALL menus only if no L/R was pressed during hold
 				if not _confirmDirty[pn] then
-					CloseMenu(pn, true)
+					CloseMenuAll(true)
 				end
 				_confirmHeld[pn] = false
 				_confirmDirty[pn] = false
@@ -1569,9 +1582,7 @@ local function InputHandler(event)
 				_confirmDirty[pn] = false
 			end
 		elseif btn == "Back" then
-			CloseMenu(pn, false)
-			_confirmHeld[pn] = false
-			_confirmDirty[pn] = false
+			CloseMenuAll(false)
 		end
 		return true  -- eat all input when this player's menu is open
 	end
