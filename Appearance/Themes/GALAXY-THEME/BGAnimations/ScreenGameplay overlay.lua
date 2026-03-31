@@ -39,7 +39,8 @@ local function GetGaugeColorKey(pn)
 	if gs.gaugeType == "LIFE4" then return "LIFE4" end
 	if gs.gaugeType == "Risky" then return "Risky" end
 	if gs.gaugeType == "FloatingFlare" then
-		local cur = gs.floatingCurrent or 10
+		local cur = gs.floatingCurrent or 0
+		if cur < 1 then return "Normal" end
 		if cur == 10 then return "FlareEX" end
 		return "Flare" .. cur
 	end

@@ -62,8 +62,8 @@ function InitGauge(pn)
 		life            = 0.5,
 		maxLives        = nil,
 		failed          = false,
-		floatingStart   = nil,
 		floatingCurrent = nil,
+		flareBars       = nil,   -- parallel bars for FloatingFlare (index 1-10)
 	}
 
 	if gaugeStr == "Normal" then
@@ -74,8 +74,8 @@ function InitGauge(pn)
 		gs.gaugeType = "FloatingFlare"
 		gs.flareIndex = 10
 		gs.life = 1.0
-		gs.floatingStart = 10
 		gs.floatingCurrent = 10
+		gs.flareBars = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 }
 
 	elseif gaugeStr == "LIFE4" then
 		gs.gaugeType = "LIFE4"
@@ -169,31 +169,29 @@ local function GetFlareDelta(params, idx)
 end
 
 -- ===== FLOATING FLARE ALGORITHM =====
--- From LifeMeterBar.cpp: on would-die, drop one level and recover
-local function ApplyFloatingFlare(gs, delta, params)
-	local idx = gs.floatingCurrent
-
-	if gs.life + delta > 0 then
-		-- Normal drain at current level
-		gs.life = gs.life + delta
-	elseif idx > 1 then
-		-- Drop one Flare level instead of dying
-		gs.floatingCurrent = idx - 1
-		local newIdx = gs.floatingCurrent
-		local newDelta = GetFlareDelta(params, newIdx)
-		local multi = 11 - newIdx
-		local recovered = math.max(0.1 * newIdx, math.max(1 + (newDelta * multi), 0))
-		if newIdx == 1 then
-			recovered = math.abs(GetFlareDelta(params, 1))
+-- Track 10 parallel bars (Flare I through EX) simultaneously.
+-- Each judgment drains every bar at its own rate. The displayed bar is
+-- the highest-indexed bar still above 0%.
+local function ApplyFloatingFlare(gs, params)
+	local bars = gs.flareBars
+	for i = 1, 10 do
+		if bars[i] > 0 then
+			local delta = GetFlareDelta(params, i)
+			bars[i] = math.max(0, math.min(1, bars[i] + delta))
 		end
-		gs.life = recovered
-	else
-		-- At Flare I, no safety net
-		gs.life = gs.life + delta
 	end
 
-	-- Clamp
-	gs.life = math.max(0, math.min(1, gs.life))
+	-- Find highest surviving bar
+	local best = 0
+	for i = 10, 1, -1 do
+		if bars[i] > 0 then
+			best = i
+			break
+		end
+	end
+
+	gs.floatingCurrent = best
+	gs.life = best > 0 and bars[best] or 0
 end
 
 -- ===== MAIN UPDATE =====
@@ -219,8 +217,7 @@ function UpdateGauge(params, pn)
 		end
 
 	elseif gType == "FloatingFlare" then
-		local delta = GetFlareDelta(params, gs.floatingCurrent)
-		ApplyFloatingFlare(gs, delta, params)
+		ApplyFloatingFlare(gs, params)
 		if gs.life <= 0 then
 			gs.failed = true
 		end
@@ -295,7 +292,9 @@ function GetGaugeDisplayName(pn)
 	if gs.gaugeType == "Risky" then return "Risky" end
 	if gs.gaugeType == "FloatingFlare" then
 		local roman = {"I","II","III","IV","V","VI","VII","VIII","IX","EX"}
-		return "Float " .. (roman[gs.floatingCurrent] or "?")
+		local cur = gs.floatingCurrent or 0
+		if cur < 1 then return "Float ---" end
+		return "Float " .. (roman[cur] or "?")
 	end
 	if gs.gaugeType == "Flare" then
 		local roman = {"I","II","III","IV","V","VI","VII","VIII","IX","EX"}

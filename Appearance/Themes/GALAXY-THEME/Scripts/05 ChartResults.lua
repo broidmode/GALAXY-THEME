@@ -93,7 +93,7 @@ function LookupFlarePoints(chartLevel, gaugeStr)
 end
 
 -- Resolve a Floating Flare result to a concrete gauge string
--- floatingCurrent is the lowest flare index the player dropped to (1-10)
+-- floatingCurrent is the highest flare bar still above 0% (1-10), or 0 if all depleted
 local function ResolveFloatingFlare(floatingCurrent)
 	if not floatingCurrent or floatingCurrent < 1 then return "Normal" end
 	local names = { "Flare1","Flare2","Flare3","Flare4","Flare5",
