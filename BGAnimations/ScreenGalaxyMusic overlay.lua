@@ -340,21 +340,7 @@ do
 	end
 end
 
--- Arrow Visibility: Normal or Constant
-local ArrowVisChoices = {
-	{ label = "Normal",   value = 1 },
-	{ label = "Constant", value = 2 },
-}
-
--- Constant Mode visibility window: 0ms to 1000ms in 10ms steps
-local ConstantMsChoices = {}
-do
-	for ms = 0, 1000, 10 do
-		ConstantMsChoices[#ConstantMsChoices+1] = { label = ms.."ms", value = ms }
-	end
-end
-
-local NUM_OPTION_ROWS = 22
+local NUM_OPTION_ROWS = 21
 
 -- Helper: find index in a choices array where c[field] == val
 local function FindChoiceIdx(choices, field, val, fallback)
@@ -429,10 +415,6 @@ local function BuildOptionRowsForPlayer(pn)
 	local asyncIdx  = FindClosestIdx(AudioSyncChoices, async)
 	local pitchIdx  = FindClosestIdx(PitchChoices, pitch)
 
-	local arrowvis   = opts.ArrowVis   or 1
-	local constms    = opts.ConstantMs or 1000
-	local constmsIdx = FindClosestIdx(ConstantMsChoices, constms)
-
 	-- Determine current preferred difficulty for the Difficulty row
 	local prefDiff = GAMESTATE:GetPreferredDifficulty(pn)
 	local diffStr = prefDiff and ToEnumShortString(prefDiff) or "Hard"
@@ -461,8 +443,6 @@ local function BuildOptionRowsForPlayer(pn)
 		{ name = "V.Delay",   choices = VisualDelayChoices,   selected = vdelayIdx },
 		{ name = "AudioSync", choices = AudioSyncChoices,     selected = asyncIdx },
 		{ name = "Pitch",     choices = PitchChoices,         selected = pitchIdx },
-		{ name = "Arrow Vis", choices = ArrowVisChoices,      selected = math.max(1, math.min(arrowvis, #ArrowVisChoices)) },
-		{ name = "Constant",  choices = ConstantMsChoices,   selected = constmsIdx },
 	}
 end
 
@@ -697,12 +677,6 @@ local function ApplyMenuOptions(pn)
 
 	-- Pitch (row 21): music rate applied to engine before gameplay
 	GalaxyOptions[pn].Pitch = PitchChoices[rows[21].selected].value
-
-	-- Arrow Visibility (row 22): Normal or Constant
-	GalaxyOptions[pn].ArrowVis = ArrowVisChoices[rows[22].selected].value
-
-	-- Constant Value (row 23): millisecond visibility window for Constant mode
-	GalaxyOptions[pn].ConstantMs = ConstantMsChoices[rows[23].selected].value
 
 	-- Apply engine-level settings (PREFSMAN / SongOptions)
 	PREFSMAN:SetPreference("VisualDelaySeconds", GalaxyOptions[pn].VisualDelay / 1000)
@@ -1777,7 +1751,6 @@ local MENU_ROW_NAMES = {
 	"NoteSkin", "Accel", "Cover", "Cover %", "Lane Vis",
 	"Guideline", "StepZone", "Fast/Slow", "Combo",
 	"JudgePri", "JudgePos", "V.Delay", "AudioSync", "Pitch",
-	"Arrow Vis", "Constant",
 }
 local MENU_NUM_ROWS  = #MENU_ROW_NAMES
 
