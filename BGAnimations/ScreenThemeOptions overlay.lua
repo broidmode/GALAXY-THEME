@@ -4,8 +4,8 @@
 
 return Def.ActorFrame{
 	OffCommand = function(self)
-		if ThemePrefs and ThemePrefs.Save then
-			ThemePrefs.Save()
+		if ThemePrefs then
+			ThemePrefs.ForceSave()
 		end
 		ApplyTimingPreset(GetGalaxyPref("TimingMode"))
 	end,
