@@ -3,6 +3,11 @@
 
 local t = Def.ActorFrame{ Name = "GalaxyUnderlay" }
 
+-- Apply per-player timing options (DDR Modern disables W5)
+t[#t+1] = Def.Actor{
+	OnCommand = function(self) ApplyPerPlayerTimingOptions() end,
+}
+
 -- Lane visibility values: index → percentage (0–100)
 local LaneVisValues = { [1]=0, [2]=10, [3]=20, [4]=30, [5]=40, [6]=50,
                          [7]=60, [8]=70, [9]=80, [10]=90, [11]=100 }

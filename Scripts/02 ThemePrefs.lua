@@ -16,9 +16,9 @@ local Prefs = {
 		Values  = { "DDR", "OutFox" },
 	},
 	TimingMode = {
-		Default = "DDR",
-		Choices = { "DDR", "OutFox" },
-		Values  = { "DDR", "OutFox" },
+		Default = "DDR Modern",
+		Choices = { "StepMania", "ITG", "DDR Extreme", "DDR Modern" },
+		Values  = { "StepMania", "ITG", "DDR Extreme", "DDR Modern" },
 	},
 	-- Sorting — two-letter codes set first/last priority; the unlisted
 	-- category fills the middle.  L = Latin, J = Japanese, N = Numbers.
