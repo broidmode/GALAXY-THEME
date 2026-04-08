@@ -3,7 +3,7 @@
 -- Only override the routing functions that differ from _fallback.
 
 function SelectMusicOrCourse()
-	if IsNetSMOnline() then
+	if type(IsNetSMOnline) == "function" and IsNetSMOnline() then
 		return "ScreenNetSelectMusic"
 	elseif GAMESTATE:IsCourseMode() then
 		return "ScreenSelectCourse"

@@ -1,6 +1,12 @@
 -- ScreenSelectProfile overlay (GALAXY)
 -- Minimal white-on-black profile picker. Same interaction model as _fallback.
-local lockSeconds = THEME:GetMetric(Var "LoadingScreen", "LockInputSecs") or 0
+local lockSeconds = 0
+do
+	local ok, val = pcall(function()
+		return THEME:GetMetric(Var "LoadingScreen", "LockInputSecs")
+	end)
+	if ok and val then lockSeconds = val end
+end
 local readyforInput = false
 
 -- Build scroller items: Guest first, then local profiles

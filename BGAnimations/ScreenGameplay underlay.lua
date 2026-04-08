@@ -76,7 +76,7 @@ for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
 					-- Border: shift bars up so thick line sits just above the on-beat
 					-- This frames notes between lines rather than bisecting them.
 					-- -30 at 720p, scaled proportionally for the actual display height.
-					local offset = -30 * (DISPLAY:GetDisplayHeight() / 720)
+					local offset = -30 * ((PREFSMAN:GetPreference("DisplayHeight") or 720) / 720)
 					notefield:SetBeatBarOffset(offset)
 					notefield:SetBeatBarsAlpha(1, 0.25, 0, 0)
 				end
