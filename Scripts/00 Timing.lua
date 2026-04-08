@@ -48,11 +48,11 @@ TimingPresets = {
 		MaxRegenComboAfterMiss  = 0,
 	},
 	["DDR Modern"] = {
-		TimingWindowSecondsW1   = 0.0170,
-		TimingWindowSecondsW2   = 0.0340,
-		TimingWindowSecondsW3   = 0.0840,
-		TimingWindowSecondsW4   = 0.1240,
-		TimingWindowSecondsW5   = 0.1240, -- matches W4; Way Off effectively disabled
+		TimingWindowSecondsW1   = 0.01667,
+		TimingWindowSecondsW2   = 0.03333,
+		TimingWindowSecondsW3   = 0.09167,
+		TimingWindowSecondsW4   = 0.14167,
+		TimingWindowSecondsW5   = 0.14167, -- matches W4; Way Off effectively disabled
 		TimingWindowSecondsHold = 0.2500,
 		TimingWindowSecondsMine = 0.0900,
 		TimingWindowSecondsRoll = 0.5000,
