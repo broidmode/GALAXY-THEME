@@ -24,7 +24,7 @@ local Prefs = {
 	-- category fills the middle.  L = Latin, J = Japanese, N = Numbers.
 	-- Display strings show the full order for clarity.
 	JapaneseSorting = {
-		Default = "nl",
+		Default = "jn",
 		Choices = { "J,N,L", "L,N,J", "J,L,N", "N,L,J", "L,J,N", "N,J,L", "Romaji" },
 		Values  = { "jl",   "lj",    "jn",    "nj",    "ln",    "nl",    "romaji" },
 	},
