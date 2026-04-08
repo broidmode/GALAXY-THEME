@@ -1,8 +1,1 @@
-# Ignore everything at root level
-*
-
-# Commit git files
-!.git*
-
-!/GALAXY-THEME/
-!/GALAXY-THEME/**
+# Empty
