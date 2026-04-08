@@ -26,6 +26,7 @@ end)
 -- Apply active timing preset before entering music select flow.
 rawset(Branch, "AfterSelectProfile", function()
 	ApplyTimingPreset(GetGalaxyPref("TimingMode"))
+	LoadGuestDefaults()
 	if GAMESTATE:GetNumPlayersEnabled() >= 2 then
 		GAMESTATE:SetCurrentStyle("versus")
 		return SelectMusicOrCourse()

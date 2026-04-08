@@ -218,15 +218,41 @@ function SaveProfileCustom(profile, dir)
 end
 
 -- Public API for forcing a save from Lua (e.g., when closing the menu)
+-- For guests, saves to the machine profile directory so settings persist.
 function SaveGalaxyPlayerPrefs(pn)
-	if not PROFILEMAN:IsPersistentProfile(pn) then
-		Trace("[GALAXY] Skipping save for non-persistent profile (guest) " .. tostring(pn))
-		return
+	if PROFILEMAN:IsPersistentProfile(pn) then
+		local slot = (pn == PLAYER_1) and "ProfileSlot_Player1" or "ProfileSlot_Player2"
+		local dir = PROFILEMAN:GetProfileDir(slot)
+		if dir and dir ~= "" then
+			SaveGalaxySettings(pn, dir)
+		end
+	else
+		-- Guest: persist to machine profile directory
+		local dir = PROFILEMAN:GetProfileDir("ProfileSlot_Machine")
+		if dir and dir ~= "" then
+			SaveGalaxySettings(pn, dir)
+			Trace("[GALAXY] Saved guest prefs for " .. tostring(pn) .. " to machine profile")
+		end
 	end
-	local slot = (pn == PLAYER_1) and "ProfileSlot_Player1" or "ProfileSlot_Player2"
-	local dir = PROFILEMAN:GetProfileDir(slot)
+end
+
+-- Load guest settings from the machine profile directory.
+-- Called after profile select for any player without a profile.
+function LoadGuestSettingsFromMachine(pn)
+	local dir = PROFILEMAN:GetProfileDir("ProfileSlot_Machine")
 	if dir and dir ~= "" then
-		SaveGalaxySettings(pn, dir)
+		LoadGalaxySettings(pn, dir)
+		Trace("[GALAXY] Loaded guest prefs for " .. tostring(pn) .. " from machine profile")
+	end
+end
+
+-- Check all joined players; load guest settings for non-persistent profiles.
+-- Call this after profile selection.
+function LoadGuestDefaults()
+	for _, pn in ipairs(GAMESTATE:GetHumanPlayers()) do
+		if not PROFILEMAN:IsPersistentProfile(pn) then
+			LoadGuestSettingsFromMachine(pn)
+		end
 	end
 end
 
