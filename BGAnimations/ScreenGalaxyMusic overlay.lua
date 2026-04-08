@@ -283,9 +283,8 @@ do
 end
 
 local GuidelineChoices = {
-	{ label = "Center", value = "Center" },
-	{ label = "Border", value = "Border" },
-	{ label = "Off",    value = "Off" },
+	{ label = "On",  value = "On" },
+	{ label = "Off", value = "Off" },
 }
 
 local StepZoneChoices = {

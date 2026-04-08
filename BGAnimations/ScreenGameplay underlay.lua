@@ -12,9 +12,8 @@ t[#t+1] = Def.Actor{
 local LaneVisValues = { [1]=0, [2]=10, [3]=20, [4]=30, [5]=40, [6]=50,
                          [7]=60, [8]=70, [9]=80, [10]=90, [11]=100 }
 
--- Guideline options: 1=Center, 2=Border, 3=Off
--- We use engine NoteField:SetBeatBars for "Center" style guidelines.
--- "Border" draws thin lines at the edges of the notefield.
+-- Guideline options: 1=On, 2=Off
+-- Uses engine NoteField:SetBeatBars for beat-aligned guideline bars.
 
 for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
 	local opts = GalaxyOptions[pn] or {}
@@ -55,10 +54,9 @@ for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
 	end
 
 	-- ===== GUIDELINE (beat bars) =====
-	local guideIdx = opts.Guideline or 1  -- 1=Center, 2=Border, 3=Off
+	local guideIdx = opts.Guideline or 1  -- 1=On, 2=Off
 
-	if guideIdx == 1 or guideIdx == 2 then
-		-- Enable engine beat bars on the NoteField after it's loaded
+	if guideIdx == 1 then
 		t[#t+1] = Def.Actor{
 			Name = "GuidelineControl_" .. ToEnumShortString(pn),
 			OnCommand = function(self)
@@ -70,19 +68,7 @@ for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
 				if not notefield then return end
 
 				notefield:SetBeatBars(true)
-
-				-- Set alpha values: measure lines prominent, 4th subtle, 8th/16th off
-				if guideIdx == 1 then
-					-- Center: lines through the center of notes
-					notefield:SetBeatBarsAlpha(1, 0.25, 0, 0)
-				else
-					-- Border: shift bars up so thick line sits just above the on-beat
-					-- This frames notes between lines rather than bisecting them.
-					-- -30 at 720p, scaled proportionally for the actual display height.
-					local offset = -30 * ((PREFSMAN:GetPreference("DisplayHeight") or 720) / 720)
-					notefield:SetBeatBarOffset(offset)
-					notefield:SetBeatBarsAlpha(1, 0.25, 0, 0)
-				end
+				notefield:SetBeatBarsAlpha(1, 0.25, 0, 0)
 			end,
 		}
 	end

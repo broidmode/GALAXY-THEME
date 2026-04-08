@@ -21,7 +21,7 @@ local Defaults = {
 	LaneCover      = 1,        -- index: 1=Off 2=Hidden+ 3=Sudden+ 4=HidSud+
 	CoverPercent   = 1,        -- index: 1=0% 2=5% … 11=50%
 	LaneVis        = 1,        -- index: 1=0% … 11=100% (0 = no darkening)
-	Guideline      = 1,        -- index: 1=Center 2=Border 3=Off
+	Guideline      = 1,        -- index: 1=On 2=Off
 	StepZone       = 1,        -- index: 1=On 2=Off
 	FastSlow       = 1,        -- index: 1=On 2=Off
 	ComboPriority  = 1,        -- index: 1=Low 2=High
