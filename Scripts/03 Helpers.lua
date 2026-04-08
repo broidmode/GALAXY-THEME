@@ -76,19 +76,20 @@ end)
 -- OutFox's Def.Text had a :Regen() method to force text relayout.
 -- ITGmania's BitmapText does this automatically in settext().
 -- Add a no-op so chained calls like self:settext("x"):Regen() don't crash.
-do
-	local bmt_mt = getmetatable(Def.BitmapText{Font="Common Normal",Text=""})
-	if bmt_mt and not bmt_mt.Regen then
-		-- Can't always get the C++ metatable; fall back to a global shim.
-	end
-end
--- Fallback: patch via Actor base class if available.
--- If the engine exposes no metatable, we rely on Lua's pcall-safe approach
--- in each call site, which is impractical.  Instead, we monkey-patch later
--- at actor creation time via InitCommand.  But simpler: just define a
--- global function on the Actor class table.
 if Actor and Actor.Regen == nil then
 	Actor.Regen = function(self) return self end
+end
+
+-- Number → comma-separated string  (1234567 → "1,234,567")
+function commify(n)
+	local s = tostring(math.floor(n))
+	local pos = #s % 3
+	if pos == 0 then pos = 3 end
+	local parts = { s:sub(1, pos) }
+	for i = pos + 1, #s, 3 do
+		parts[#parts + 1] = s:sub(i, i + 2)
+	end
+	return table.concat(parts, ",")
 end
 
 -- Resolve a jacket image path for a song or course, with fallback chain

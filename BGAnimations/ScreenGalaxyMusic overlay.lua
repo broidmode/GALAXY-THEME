@@ -2491,16 +2491,7 @@ local PANEL_DIFF_COLORS = {
 	Difficulty_Challenge = color("#eb1eff"),
 }
 
-local function commify(n)
-	local s = tostring(n)
-	local pos = #s % 3
-	if pos == 0 then pos = 3 end
-	local parts = { s:sub(1, pos) }
-	for i = pos + 1, #s, 3 do
-		parts[#parts+1] = s:sub(i, i + 2)
-	end
-	return table.concat(parts, ",")
-end
+-- commify() is now global in Scripts/03 Helpers.lua
 
 -- Lamp display colors
 local LampColors = {

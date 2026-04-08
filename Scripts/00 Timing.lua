@@ -42,11 +42,7 @@ function GetWindowSeconds(TimingWindow, Scale, Add)
 	return fSecs
 end
 
-TimingModes = {}
-for i,v in ipairs(TimingWindow) do
-	local TW = TimingWindow[i]()
-	table.insert(TimingModes,TW.Name)
-end
+
 
 function TimingOrder(TimTab)
 	local con = {}
