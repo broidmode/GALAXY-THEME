@@ -14,14 +14,14 @@ function GetLocalProfiles()
 	local t = {}
 	-- Guest entry (always first — scroller item 0)
 	t[#t+1] = Def.ActorFrame{
-		Def.Text{ Font = RodinPath("db"), Size = FontL("db"), Text = THEME:GetString("ScreenSelectProfile", "Guest"),
+		Def.Text{ Font = RodinPath("db"), Size = FontL("db"), Text = "Guest",
 			InitCommand = function(self)
 				self:y(-6):zoom(FONT_ZOOM):diffuse(color("#66aaff")):ztest(true)
 				self:shadowlength(0)
 				self:SetTextureFiltering(false)
 			end,
 		},
-		Def.Text{ Font = RodinPath("db"), Size = FontM("db"), Text = THEME:GetString("ScreenSelectProfile", "PlayWithoutSaving"),
+		Def.Text{ Font = RodinPath("db"), Size = FontM("db"), Text = "Play without saving",
 			InitCommand = function(self)
 				self:y(14):zoom(FONT_ZOOM):diffuse(color("#888888")):ztest(true)
 				self:shadowlength(0)
@@ -63,7 +63,7 @@ function LoadPlayerStuff(Player)
 	-- "Press START to join" frame (shown when player not joined)
 	t[#t+1] = Def.ActorFrame{
 		Name = "JoinFrame",
-		Def.Text{ Font = RodinPath("db"), Size = FontL("db"), Text = THEME:GetString("ScreenSelectProfile", "PressStartToJoin"),
+		Def.Text{ Font = RodinPath("db"), Size = FontL("db"), Text = "Press START to join",
 			InitCommand = function(self)
 				self:zoom(FONT_ZOOM):diffuse(color("#888888"))
 				self:shadowlength(0)
@@ -124,7 +124,7 @@ function UpdateInternal3(self, Player)
 			if ind == 0 then
 				-- Guest selected
 				scroller:SetDestinationItem(0)
-			seltext:settext(THEME:GetString("ScreenSelectProfile", "Guest")):Regen()
+			seltext:settext("Guest"):Regen()
 			elseif ind > 0 then
 				-- Profile selected (scroller item = ind because Guest is item 0)
 				scroller:SetDestinationItem(ind)
@@ -140,12 +140,12 @@ function UpdateInternal3(self, Player)
 					-- No profiles: default to Guest
 					SCREENMAN:GetTopScreen():SetProfileIndex(Player, 0)
 					scroller:SetDestinationItem(0)
-					seltext:settext(THEME:GetString("ScreenSelectProfile", "Guest")):Regen()
+					seltext:settext("Guest"):Regen()
 				end
 			end
 		else
 			scroller:visible(false)
-			seltext:settext(THEME:GetString("ScreenSelectProfile", "MemoryCard")):Regen()
+			seltext:settext("Memory Card"):Regen()
 			SCREENMAN:GetTopScreen():SetProfileIndex(Player, 0)
 		end
 	else

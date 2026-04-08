@@ -65,8 +65,6 @@ for _, pn in ipairs(GAMESTATE:GetEnabledPlayers()) do
 				if not notefield then return end
 
 				notefield:SetBeatBars(true)
-				notefield:SetStopBars(true)
-				notefield:SetBpmBars(true)
 
 				-- Set alpha values: measure lines prominent, 4th subtle, 8th/16th off
 				if guideIdx == 1 then
