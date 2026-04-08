@@ -41,7 +41,7 @@ See [`Scripts/00 Timing.lua`](Scripts/00%20Timing.lua).
 
 ### Flare Gauge Penalties
 
-Flare gauges apply drain penalties on judgments below Marvelous. Values are inherited from [stepmania-ddr-5_1-new](https://github.com/celunah/stepmania-ddr-5_1-new) (`LifeMeterBar.h`). Index 1 = Flare I, index 10 = Flare EX.
+Flare gauges apply drain penalties on judgments below Marvelous. Values are inherited from [stepmania-ddr-5_1-new](https://github.com/celunah/stepmania-ddr-5_1-new) (`LifeMeterBar.h`). I have no idea if these values are correct.
 
 See [`Scripts/04 GaugeState.lua`](Scripts/04%20GaugeState.lua).
 
