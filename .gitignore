@@ -4,9 +4,5 @@
 # Commit git files
 !.git*
 
-!Appearance/
-Appearance/*
-!Appearance/Themes/
-Appearance/Themes/*
-!Appearance/Themes/GALAXY-THEME/
-!Appearance/Themes/GALAXY-THEME/**
+!/GALAXY-THEME/
+!/GALAXY-THEME/**
