@@ -20,19 +20,19 @@ Recommended for use with Schneider's notekins:
 
 ### Timing
 
-Three timing presets are available, selectable per-session. `StepMania` resets to engine defaults.
+Three timing presets are recorded. The theme forces `DDR Modern` when the theme is set, and reverts otherwise.
 
 See [`Scripts/00 Timing.lua`](Scripts/00%20Timing.lua).
 
 | Window                 | StepMania | ITG    | DDR Extreme | DDR Modern |
 |------------------------|-----------|--------|-------------|------------|
-| Marvelous (W1)         | ±22.5ms   | ±21.5ms | ±13.3ms    | ±16.67ms   |
-| Perfect (W2)           | ±45ms     | ±43ms   | ±26.6ms    | ±33.33ms   |
-| Great (W3)             | ±90ms     | ±102ms  | ±80ms      | ±91.67ms   |
-| Good (W4)              | ±135ms    | ±135ms  | ±120ms     | ±141.67ms  |
+| Marvelous (W1)         | ±22.5ms   | ±21.5ms | ±13.3ms    | ±17ms   |
+| Perfect (W2)           | ±45ms     | ±43ms   | ±26.6ms    | ±34ms   |
+| Great (W3)             | ±90ms     | ±102ms  | ±80ms      | ±84ms   |
+| Good (W4)              | ±135ms    | ±135ms  | ±120ms     | ±124ms  |
 | Boo (W5)               | ±180ms    | ±180ms  | ±166.6ms   | N/A  |
-| Hold                   | ±250ms  | ±320ms| ±250ms   | ±250ms   |
-| Mine                   | ±70ms   | ±70ms | ±90ms    | ±90ms    |
+| Hold                   | ±250ms  | ±320ms| ±250ms   | ±300ms   |
+| Mine                   | ±70ms   | ±70ms | ±90ms    | ±34ms    |
 | Roll                   | ±350ms  | ±350ms| ±500ms   | ±500ms   |
 
 
